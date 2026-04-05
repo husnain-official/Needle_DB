@@ -1,0 +1,14 @@
+#   folders to ignore
+.vscode/
+build/
+include/nlohmann/
+bin/
+obj/
+
+#   documentation to ignore
+*.pdf
+*.docx
+
+#   OS generated files
+.DS_Store
+Thumbs.db
