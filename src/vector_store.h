@@ -1,7 +1,8 @@
-#include <vector>
-#include <string>
+
 #ifndef VECTOR_STORE
 #define VECTOR_STORE
+#include <vector>
+#include <string>
 struct Vector
 {
     std::string id;

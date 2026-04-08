@@ -17,7 +17,7 @@ int main()
     assert(cosine_similarity(c, d) == -1.00f);
     // Test 3: perpendicular vectors must score 0.0
     std::vector<float> e = {1.00, 0.00};
-    std::vector<float> f = {0.00, 0.00};
+    std::vector<float> f = {0.00, 1.00};
     assert(cosine_similarity(e, f) == 0.00f);
 
     // Test 4:  with generated embeddings
