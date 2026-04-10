@@ -1,7 +1,7 @@
 #include <iostream>
 #include "vector_store.h"
 #include "file_manager.h"
-#include "nlohmann/json.hpp"
+#include "../tests/integration/json.hpp"
 #include <fstream>
 using namespace std;
 int main()

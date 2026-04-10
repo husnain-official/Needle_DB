@@ -12,7 +12,7 @@ struct Header
 {
     char magic_number[4];  // {'V','D','B','\0'}, required file-format
     uint8_t version;       //  version of database
-    uint32_t dimensions;   //  dims of each vector = 1024
+    uint32_t dimensions;   //  dims of each vector = 1536
     uint8_t id_length;     //  fixed bytes of "id_name"
     uint64_t vector_count; //  records
     uint8_t padding[6];    // future-proof

@@ -1,8 +1,4 @@
-#include <iostream>
-#include <math.h>
-#include <algorithm>
 #include "vector_store.h"
-// using namespace std;
 //  For performance
 void normalise_vector(std::vector<float> &vec) // call before storing into file
 {

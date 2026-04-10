@@ -1,8 +1,10 @@
-
 #ifndef VECTOR_STORE
 #define VECTOR_STORE
 #include <vector>
 #include <string>
+#include <iostream>
+#include <math.h>
+#include <algorithm>
 struct Vector
 {
     std::string id;
