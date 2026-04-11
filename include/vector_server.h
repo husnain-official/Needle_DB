@@ -11,7 +11,27 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
-//  -----------Both below structs are for refrence only, and is predefined.-------------
+//
+#include <string>
+#include <cstring>
+#include <iostream>
+//
+class Vector_Server
+{
+public:
+    Vector_Server(std::string port);
+    ~Vector_Server();
+    // handels core-functionality
+    bool setup();
+    void run();
+    void stop();
+
+private:
+    int server_fd;
+    std::string port_num;
+    void handel_client(int client_fd);
+};
+//  -----------Both below structs are for refrence only, and are predefined.-------------
 // struct sockaddr
 // {
 //     unsigned short sa_family; // address family, AF_xxx
