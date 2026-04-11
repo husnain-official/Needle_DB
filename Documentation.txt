@@ -1,0 +1,11 @@
+struct addrinfo {
+    int              ai_flags;          AI_passive = this is the server, not a client
+    int              ai_family;         AF_UNSPEC(whatever works),  tells what type of IP to expect
+    int              ai_socktype;       Stream of Dgram
+    int              ai_protocol;       0 = choose default protocol for this socket
+    size_t           ai_addrlen;        size of address to distinguish
+    struct sockaddr *ai_addr;           the address to data itself(ip and port #)
+    char            *ai_canonname;      
+    struct addrinfo *ai_next;      // linked list, next node
+};
+    first 4 tells socket how to behave and what type of connection to expect
