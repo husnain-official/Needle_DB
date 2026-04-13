@@ -69,3 +69,156 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
         results.resize(top_n); // only keep 'n' pairs
     return results;
 }
+//----------------------------Functionality For 'Vector_Server'----------------------------------
+bool insert_parsing(Vector &v, const std::string &command)
+{
+    // Declaration of necessry variables
+    std::size_t index = 0, next_space_index = 0, to_move = 0;
+    // Check-01
+    next_space_index = command.find(' ', 0);
+    if (next_space_index != 6 or next_space_index == std::string::npos)
+    {
+        // we have not done anything yet, so nothing to reset
+        std::cout << "ERROR<Incorrect format for 'INSERT'>\n";
+        return false;
+    }
+    index = next_space_index + 1; // 7
+    next_space_changes(command, index, next_space_index, to_move);
+    // Check-02
+    if ((to_move < 1 or to_move > 32) or (next_space_index == std::string::npos)) // range 1-32
+    {
+        //  again we have not done anything yet, so nothing to reset
+        if (next_space_index == std::string::npos)
+        {
+            std::cout << "ERROR<Incorrect format for 'INSERT'>\n";
+            return false;
+        }
+        else if (to_move < 1)
+        {
+            std::cout << "ERROR<Id size can not be zero>\n";
+            return false;
+        }
+        else
+        {
+            std::cout << "ERROR<Id size can not greater than 32>\n";
+            return false;
+        }
+    }
+    v.id = command.substr(index, to_move);
+    index = next_space_index + 1; // 40(if to_move was 33)
+    next_space_changes(command, index, next_space_index, to_move);
+    //  Check-03
+
+    if ((to_move != dimensions_no_of_digits) or (next_space_index == std::string::npos))
+    {
+        //  we should reset v1.id but unnecessary
+        std::cout << "ERROR<Incorrect 'Dimension' value entered>\n";
+        return false;
+    }
+    v.dims = (std::stoi(command.substr(index, to_move)));
+    // Embeddings loop
+    v.data.resize(dimensions_set);
+    for (std::size_t i = 0; i < dimensions_set; i++)
+    {
+        index = next_space_index + 1;
+        if (i != (dimensions_set - 1))
+        {
+            next_space_changes(command, index, next_space_index, to_move);
+            //  Check-04
+            if ((next_space_index == std::string::npos))
+            {
+                std::cout << "ERROR<Float values do not match the dimenstions>\n";
+                return false;
+            }
+            v.data[i] = std::stof(command.substr(index, to_move));
+        }
+        else
+        {
+            if (command.size() >= index)
+                to_move = command.size() - index;
+            v.data[i] = std::stof(command.substr(index, to_move));
+        }
+    }
+    return true;
+}
+bool query_parsing(Vector &v, size_t &top_k, const std::string &command)
+{
+    std::size_t index = 0,
+                next_space_index = 0, to_move = 0;
+    v.id = "";
+    const size_t MAX_TOP_K = 30;
+    const size_t MAX_TOP_K_DIGITS = 2;
+    int top_k_raw = 0;
+    // Check-01: verify command starts with "QUERY "
+    next_space_index = command.find(' ', 0);
+    if (next_space_index != 5 || next_space_index == std::string::npos)
+    {
+        std::cout << "ERROR<Incorrect format for 'QUERY'>\n";
+        return false;
+    }
+    // Check-02: parse and validate top_k
+    index = next_space_index + 1;
+    next_space_changes(command, index, next_space_index, to_move);
+    if (next_space_index == std::string::npos or to_move < 1)
+    {
+        std::cout << "ERROR<Value of 'top_k' not provided>\n";
+        return false;
+    }
+    top_k_raw = std::stoi(command.substr(index, to_move));
+    if (top_k_raw < 1)
+    {
+        std::cout << "ERROR<top_k must be a positive number>\n";
+        return false;
+    }
+    if (top_k_raw > MAX_TOP_K)
+    {
+        top_k_raw = MAX_TOP_K; // silently clamp
+    }
+    top_k = static_cast<size_t>(top_k_raw);
+    // Check-03: parse and validate dims
+    index = next_space_index + 1;
+    next_space_changes(command, index, next_space_index, to_move);
+    if (next_space_index == std::string::npos || to_move < 1)
+    {
+        std::cout << "ERROR<Value of 'dims' not provided>\n";
+        return false;
+    }
+    int dims_raw = std::stoi(command.substr(index, to_move));
+    if (dims_raw < 1)
+    {
+        std::cout << "ERROR<dims must be a positive number>\n";
+        return false;
+    }
+    v.dims = static_cast<size_t>(dims_raw);
+    // Embeddings loop
+    v.data.resize(dimensions_set);
+    for (std::size_t i = 0; i < dimensions_set; i++)
+    {
+        index = next_space_index + 1;
+        if (i != (dimensions_set - 1))
+        {
+            next_space_changes(command, index, next_space_index, to_move);
+            //  Check-04
+            if ((next_space_index == std::string::npos))
+            {
+                std::cout << "ERROR<Float values do not match the dimenstions>\n";
+                return false;
+            }
+            v.data[i] = std::stof(command.substr(index, to_move));
+        }
+        else
+        {
+            if (command.size() >= index)
+                to_move = command.size() - index;
+            v.data[i] = std::stof(command.substr(index, to_move));
+        }
+    }
+    return true;
+}
+
+//------------Helpers----------------
+void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
+{
+    next_space_index = command.find(' ', index);
+    to_move = next_space_index - index;
+}

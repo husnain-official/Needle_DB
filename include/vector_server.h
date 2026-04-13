@@ -15,11 +15,15 @@
 #include <string>
 #include <cstring>
 #include <iostream>
+#include "vector_store.h"
+#include "file_manager.h"
 //
+#define BACKLOG (10) // max no of client waiting in queue
 class Vector_Server
 {
 public:
-    Vector_Server(std::string port);
+    //
+    Vector_Server(std::string port, const Vector_store &, const File_manager &);
     ~Vector_Server();
     // handels core-functionality
     bool setup();
@@ -29,7 +33,10 @@ public:
 private:
     int server_fd;
     std::string port_num;
-    void handel_client(int client_fd);
+    void handle_client(int client_fd);
+    // Vector_server is dependent upon both, vector_store and file_manager
+    const Vector_store &vector_store;
+    const File_manager &file_manager;
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
 // struct sockaddr

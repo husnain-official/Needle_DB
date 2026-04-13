@@ -5,6 +5,11 @@
 #include <iostream>
 #include <math.h>
 #include <algorithm>
+#include <sstream>
+//
+#define dimensions_no_of_digits (4)
+#define dimensions_set (1056)
+#define id_length_set (32)
 struct Vector
 {
     std::string id;
@@ -21,4 +26,9 @@ public:
     std::vector<float> &get_vector_data(size_t);
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);
 };
+//----------------------------Functionality For 'Vector_Server'----------------------------------
+bool insert_parsing(Vector &, const std::string &);
+bool query_parsing(Vector &, size_t &, const std::string &);
+//----------helpers----------------
+void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 #endif

@@ -1,7 +1,12 @@
 #include "vector_server.h"
-//  The setups
-Vector_Server::Vector_Server(std::string port) : port_num(port), server_fd(-1) {}
-Vector_Server::~Vector_Server() { stop(); }
+// Open 'Beejs guide to Network Programming', to understand this easily
+// https://beej.us/guide/bgnet/html/split/system-calls-or-bust.html#getaddrinfoprepare-to-launch
+//  The setup
+Vector_Server::Vector_Server(std::string port, const Vector_store &V_store, const File_manager &F_manager) : port_num(port), server_fd(-1), vector_store(V_store), file_manager(F_manager)
+// set server_fd to -1, as a socket has not been assigned yet
+{
+}
+Vector_Server::~Vector_Server() { stop(); } //
 bool Vector_Server::setup()
 {
     // setup (necessary info for socket creation)
@@ -13,13 +18,13 @@ bool Vector_Server::setup()
     hints.ai_flags = AI_PASSIVE;      // Fill up my Ip address, (I am the server)
     // Safety-Check
     if ((status = getaddrinfo(NULL, port_num.c_str(), &hints, &results)) != 0)
+    // basically, 'getaddrinfo' returns a status and a refrence to linked list with all possible sockets which match our requirements'hints'
     {
         // 'cerr' if error, show it immediately. we use gai_strerror as it has its unique error codes
         std::cerr << gai_strerror(status);
         return false;
     }
     // Find a valid socket and bind to it
-    int server_fd;
     for (node = results; node != NULL; node = node->ai_next)
     {
         // server_fd -> socket file descriptor
@@ -36,6 +41,7 @@ bool Vector_Server::setup()
         if (bind(server_fd, node->ai_addr, node->ai_addrlen) == 0)
             break; // a working socket found and bounded :)
         close(server_fd);
+        server_fd = -1; // Reset if bind failed
     }
     if (node == NULL)
     {
@@ -56,7 +62,7 @@ void Vector_Server::stop()
 void Vector_Server::run()
 {
     // Now we allow our port to listen
-    if ((listen(server_fd, 10)) == -1)
+    if ((listen(server_fd, BACKLOG)) == -1)
     {
         perror("listen");
         exit(1);
@@ -74,31 +80,57 @@ void Vector_Server::run()
             perror("accept");
             continue;
         }
-        // std::cout << "Client connected successfully.\n";
-        handel_client(client_fd);
+        std::cout << "Client connected successfully.\n";
+        handle_client(client_fd);
     }
 }
-void Vector_Server::handel_client(int client_fd)
+void Vector_Server::handle_client(int client_fd)
 {
-    //  ------Receive-Data---------
-    int buffer_len, bytes_recv = 0;
-    char buffer[1024];
-    memset(buffer, 0, 1024);
-    buffer_len = sizeof(buffer);
-    bytes_recv += (recv(client_fd, buffer, buffer_len, 0));
-    std::cout << bytes_recv << " bytes received.\n";
-    if (bytes_recv > 0)
+    int buffer_len = 4096, bytes_recv = 0;
+    char buffer[buffer_len];
+    while (true)
     {
-        std::cout << bytes_recv << " bytes received.\n";
-        std::cout << "Request data: \n"
-                  << buffer << std::endl; // See what the browser sent
+        memset(buffer, 0, buffer_len);
+        bytes_recv = (recv(client_fd, buffer, buffer_len - 1, 0));
+        std::string command(buffer);
+        // safety-check
+        if (bytes_recv <= 0)
+            break; // client disconnected
+        std::cout << "Received: " << command << std::endl;
+        //------------All Commands Conditionals-----------------
+        if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
+        {
+            Vector v;
+            if (insert_parsing(v, command))
+            {
+                // save to file
+                std::cout << "Ok\n";
+            }
+            continue;
+        }
+        else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS F1 F2 ... Fn
+        {
+            Vector v;
+            size_t top_k = 0;
+            if (query_parsing(v, top_k, command))
+            {
+                // do whatever
+            }
+            continue;
+        }
+        else if ((command.rfind("DELETE", 0)) == 0)
+        {
+            // do delete things
+        }
+        else if ((command.rfind("SAVE", 0)) == 0)
+        {
+            // do save things
+        }
+        else if ((command.rfind("LOAD", 0)) == 0)
+        {
+            // do load things
+        }
+        //
+        close(client_fd); // Close the connection after sending
     }
-    //
-    const char *send_data =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 14\r\nConnection: close\r\n\r\nHusnain here !";
-    int len, bytes_sent;
-    len = strlen(send_data);
-    bytes_sent = send(client_fd, send_data, len, 0);
-
-    close(client_fd); // Close the connection after sending
 }

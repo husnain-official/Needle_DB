@@ -9,3 +9,5 @@ struct addrinfo {
     struct addrinfo *ai_next;      // linked list, next node
 };
     first 4 tells socket how to behave and what type of connection to expect
+next time be consistent with the naming of classes whatever format you 
+follow make sure it stays consistent through out the project
