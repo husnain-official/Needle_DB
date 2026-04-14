@@ -5,26 +5,25 @@
 using namespace std;
 int main()
 {
-    // {
-    // cout << "VectorDB   starting...\n";
-    // // ----------------------Declare All Components-------------------------
-    // Vector_store database;
-    // //
-    // std::string path = "../data/database.vdb";
-    // File_manager file_handler(path, dimenstions_set, id_length_set);
-    // //
-    // std::string port = "8080";
-    // Vector_Server server(port, database, file_handler);
-    // //----------------------------Main Body---------------------------------
-    // server.setup();
-    // server.run();
-    // server.stop();
-    // //----------------------------Program End-------------------------------
-    // }
+    {
+        cout << "VectorDB   starting...\n";
+        // ----------------------Declare All Components-------------------------
+        Vector_store database;
+        //
+        std::string path = "data/database.vdb";
+        File_manager file_handler(path, dimensions_set, id_length_set);
+        //
+        std::string port = "8080";
+        Vector_Server server(port, database, file_handler);
+        //----------------------------Main Body---------------------------------
+        server.setup();
+        server.run();
+        server.stop();
+        //----------------------------Program End-------------------------------
+    }
 
-  
-
-    cout << "It works\n";
+    //
+    // cout << "It works\n";
     // cout << "Id: " << id << endl;
     // cout << "Top_k: " << top_k << endl;
     // cout << "Dims: " << v.dims << endl;

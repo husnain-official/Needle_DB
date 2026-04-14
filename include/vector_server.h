@@ -23,20 +23,22 @@ class Vector_Server
 {
 public:
     //
-    Vector_Server(std::string port, const Vector_store &, const File_manager &);
+    Vector_Server(std::string port, Vector_store &, File_manager &);
     ~Vector_Server();
     // handels core-functionality
     bool setup();
     void run();
     void stop();
+    // testing
+    void test_read_write(File_manager &file_handler);
 
 private:
     int server_fd;
     std::string port_num;
     void handle_client(int client_fd);
     // Vector_server is dependent upon both, vector_store and file_manager
-    const Vector_store &vector_store;
-    const File_manager &file_manager;
+    Vector_store &vector_store;
+    File_manager &file_manager;
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
 // struct sockaddr

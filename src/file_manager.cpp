@@ -12,10 +12,10 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     header_.version = 1;
     // Initilize other elements
     record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions);
-    if (!std::filesystem::exists(path))
+    if (!(std::filesystem::exists(path)))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!file_.is_open())
+        if (!(file_.is_open()))
             throw std::runtime_error("Cannot create DB file: " + path);
         flush_header();
         std::cout << "Data-Base Created\n";
@@ -96,6 +96,7 @@ bool File_manager::write_vector(const std::string &id, const float *embeddings) 
 }
 bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_out)
 {
+    file_.clear();
     // 0.   Check
     if (index >= ((header_.vector_count)))
         return false;
