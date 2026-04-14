@@ -114,21 +114,32 @@ void Vector_Server::handle_client(int client_fd)
             size_t top_k = 0;
             if (query_parsing(v, top_k, command))
             {
+                std::cout << "Results-" << top_k << std::endl;
                 // do whatever
             }
             continue;
         }
-        else if ((command.rfind("DELETE", 0)) == 0)
+        else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
         {
-            // do delete things
+            std::string id = "";
+            if (delete_parsing(id, command))
+            {
+                // do delete things
+            }
         }
-        else if ((command.rfind("SAVE", 0)) == 0)
+        else if ((command.rfind("SAVE", 0)) == 0) // SAVE
         {
-            // do save things
+            if (save_parsing(command, 0))
+            {
+                // do save things
+            }
         }
-        else if ((command.rfind("LOAD", 0)) == 0)
+        else if ((command.rfind("LOAD", 0)) == 0) // LOAD
         {
-            // do load things
+            if (save_parsing(command, 1)) // save and load -> 4 chars same logic
+            {
+                // do load things
+            }
         }
         //
         close(client_fd); // Close the connection after sending

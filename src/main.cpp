@@ -22,7 +22,10 @@ int main()
     // //----------------------------Program End-------------------------------
     // }
 
-       // cout << "Id: " << v.id << endl;
+  
+
+    cout << "It works\n";
+    // cout << "Id: " << id << endl;
     // cout << "Top_k: " << top_k << endl;
     // cout << "Dims: " << v.dims << endl;
     // cout << std::fixed << std::setprecision(5);

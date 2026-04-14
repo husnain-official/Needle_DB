@@ -222,3 +222,44 @@
 
 //     return 0;
 // }
+
+// std::string command = "DELETE Chunk-001    j                                               ";
+// std::string id = "";
+// //
+// std::size_t index = 0,
+//             next_space_index = 0, to_move = 0;
+// // Check-01: verify command starts with "DELETE"
+// next_space_index = command.find(' ', 0);
+// if (next_space_index != 6 || next_space_index == std::string::npos)
+// {
+//     std::cout << "ERROR<Incorrect format for 'DELETE'>\n";
+//     return false;
+// }
+// index = next_space_index + 1; // 7
+// // Check-02 verify format of 'id' and parse it
+// to_move = command.size() - index;
+// if (to_move < 1 or to_move > 32) // range 1-32
+// {
+//     //  again we have not done anything yet, so nothing to reset
+//     if (to_move < 1)
+//     {
+//         std::cout << "ERROR<Id size can not be zero>\n";
+//         return false;
+//     }
+//     else
+//     {
+//         std::cout << "ERROR<Id size can not greater than 32>\n";
+//         return false;
+//     }
+// }
+// id = command.substr(index, to_move);
+
+// // return true;
+
+
+
+
+
+
+
+

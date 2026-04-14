@@ -70,6 +70,7 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
     return results;
 }
 //----------------------------Functionality For 'Vector_Server'----------------------------------
+// add try-catch blocks in all of these(later).
 bool insert_parsing(Vector &v, const std::string &command)
 {
     // Declaration of necessry variables
@@ -85,7 +86,7 @@ bool insert_parsing(Vector &v, const std::string &command)
     index = next_space_index + 1; // 7
     next_space_changes(command, index, next_space_index, to_move);
     // Check-02
-    if ((to_move < 1 or to_move > 32) or (next_space_index == std::string::npos)) // range 1-32
+    if ((to_move < 1 or to_move > id_length_set) or (next_space_index == std::string::npos)) // range 1-32
     {
         //  again we have not done anything yet, so nothing to reset
         if (next_space_index == std::string::npos)
@@ -116,6 +117,12 @@ bool insert_parsing(Vector &v, const std::string &command)
         return false;
     }
     v.dims = (std::stoi(command.substr(index, to_move)));
+    // Check-04
+    if (v.dims != dimensions_set)
+    {
+        std::cout << "ERROR<Invalid dimensions entered\n>";
+        return false;
+    }
     // Embeddings loop
     v.data.resize(dimensions_set);
     for (std::size_t i = 0; i < dimensions_set; i++)
@@ -124,7 +131,7 @@ bool insert_parsing(Vector &v, const std::string &command)
         if (i != (dimensions_set - 1))
         {
             next_space_changes(command, index, next_space_index, to_move);
-            //  Check-04
+            //  Check-05
             if ((next_space_index == std::string::npos))
             {
                 std::cout << "ERROR<Float values do not match the dimenstions>\n";
@@ -190,6 +197,12 @@ bool query_parsing(Vector &v, size_t &top_k, const std::string &command)
         return false;
     }
     v.dims = static_cast<size_t>(dims_raw);
+    // Check-04
+    if (v.dims != dimensions_set)
+    {
+        std::cout << "ERROR<Invalid dimensions entered\n>";
+        return false;
+    }
     // Embeddings loop
     v.data.resize(dimensions_set);
     for (std::size_t i = 0; i < dimensions_set; i++)
@@ -198,7 +211,7 @@ bool query_parsing(Vector &v, size_t &top_k, const std::string &command)
         if (i != (dimensions_set - 1))
         {
             next_space_changes(command, index, next_space_index, to_move);
-            //  Check-04
+            //  Check-05
             if ((next_space_index == std::string::npos))
             {
                 std::cout << "ERROR<Float values do not match the dimenstions>\n";
@@ -215,7 +228,51 @@ bool query_parsing(Vector &v, size_t &top_k, const std::string &command)
     }
     return true;
 }
-
+bool delete_parsing(std::string &id, const std::string &command)
+{
+    std::size_t index = 0,
+                next_space_index = 0, to_move = 0;
+    // Check-01: verify command starts with "DELETE"
+    next_space_index = command.find(' ', 0);
+    if (next_space_index != 6 || next_space_index == std::string::npos)
+    {
+        std::cout << "ERROR<Incorrect format for 'DELETE'>\n";
+        return false;
+    }
+    index = next_space_index + 1; // 7
+    // Check-02 verify format of 'id' and parse it
+    to_move = command.size() - index;
+    if (to_move < 1 or to_move > 32) // range 1-32
+    {
+        //  again we have not done anything yet, so nothing to reset
+        if (to_move < 1)
+        {
+            std::cout << "ERROR<Id size can not be zero>\n";
+            return false;
+        }
+        else
+        {
+            std::cout << "ERROR<Id size can not greater than 32>\n";
+            return false;
+        }
+    }
+    id = command.substr(index, to_move);
+    return true;
+}
+bool save_parsing(std::string &command, bool state)
+{
+    command.erase(std::remove(command.begin(), command.end(), ' '), command.end());
+    int len = command.length();
+    if (len != 4)
+    {
+        if (state == 0)
+            std::cout << "ERROR<Invalid format for SAVE>\n";
+        else
+            std::cout << "ERROR<Invalid format for LOAD>\n";
+        return false;
+    }
+    return true;
+}
 //------------Helpers----------------
 void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
 {

@@ -29,6 +29,8 @@ public:
 //----------------------------Functionality For 'Vector_Server'----------------------------------
 bool insert_parsing(Vector &, const std::string &);
 bool query_parsing(Vector &, size_t &, const std::string &);
+bool delete_parsing(std::string &, const std::string &);
+bool save_parsing(std::string &, bool );
 //----------helpers----------------
 void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 #endif
