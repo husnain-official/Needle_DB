@@ -1,12 +1,12 @@
 import random
 
 def generate_insert_command():
-    vector_id = "Chunk-001"
+    vector_id = "Chunk-010"
     dims = 1056
     
-    # Generate 1056 random floating point numbers between -1.0 and 1.0
+    # Generate 1056 random floating point numbers between -50.0 and 50.0
     # Rounded to 4 decimal places to keep the payload size reasonable
-    vector_data = [str(round(random.uniform(-1.0, 1.0), 4)) for _ in range(dims)]
+    vector_data = [str(round(random.uniform(-50.0, 50.0), 4)) for _ in range(dims)]
     
     # Construct the exact format: INSERT Chunk-001 1056 0.23 ... 9.332
     command = f"INSERT {vector_id} {dims} " + " ".join(vector_data)

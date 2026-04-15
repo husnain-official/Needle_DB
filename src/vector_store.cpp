@@ -1,18 +1,19 @@
 #include "vector_store.h"
 //  For performance
-void normalise_vector(std::vector<float> &vec) // call before storing into file
+bool Vector_store::normalise_vector(std::vector<float> &vec) // call before storing into file
 {
     double long vec_mag = 0;
     for (size_t i = 0; i < vec.size(); i++)
         vec_mag += (vec[i] * vec[i]);
     vec_mag = sqrt(vec_mag);
     if (vec_mag == 0)
-        return;
+        return false;
     // divide each element with magnitude.
     for (size_t i = 0; i < vec.size(); i++)
         vec[i] = vec[i] / vec_mag;
     // Now, dot_similarity and cosine_similarity will give same restuls
     // we have removed the 'magnitude' of overlap and only 'direction' exist now
+    return true;
 }
 //  similarity-functions
 float cosine_similarity(const std::vector<float> &vec_a, const std::vector<float> &vec_b)
@@ -71,6 +72,7 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
 }
 //----------------------------Functionality For 'Vector_Server'----------------------------------
 // add try-catch blocks in all of these(later).
+// another probleam all errors are printed to the server and not the client
 bool insert_parsing(Vector &v, const std::string &command)
 {
     // Declaration of necessry variables
@@ -234,7 +236,7 @@ bool delete_parsing(std::string &id, const std::string &command)
                 next_space_index = 0, to_move = 0;
     // Check-01: verify command starts with "DELETE"
     next_space_index = command.find(' ', 0);
-    if (next_space_index != 6 || next_space_index == std::string::npos)
+    if (next_space_index != 6 or next_space_index == std::string::npos)
     {
         std::cout << "ERROR<Incorrect format for 'DELETE'>\n";
         return false;
@@ -268,7 +270,7 @@ bool save_parsing(std::string &command, bool state)
         if (state == 0)
             std::cout << "ERROR<Invalid format for SAVE>\n";
         else
-            std::cout << "ERROR<Invalid format for LOAD>\n";
+            // std::cout << "ERROR<Invalid format for LOAD>\n";
         return false;
     }
     return true;

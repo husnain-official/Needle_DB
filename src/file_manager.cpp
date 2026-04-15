@@ -131,18 +131,27 @@ bool File_manager::delete_vector(uint64_t index)
     char x = 0;
     file_.write(&x, 1);
     // 3.   Return file-state
+    file_.flush();
     return file_.good();
 }
 int64_t File_manager::find_by_id(const std::string &id)
 {
+    // Prevent false matches if search ID is too long
+    if (id.length() >= header_.id_length)
+        return -1;
     file_.clear();
     //     Loop through each 'Record' and compare ids
     std::vector<char> id_extracted(header_.id_length);
     for (uint64_t i = 0; i < header_.vector_count; i++)
     {
         file_.seekg(record_offset(i));
+
         char flag_state;
-        file_.read(&flag_state, 1);
+        // Ensure read was successful
+        if (!file_.read(&flag_state, 1))
+            break;
+
+        // file_.read(&flag_state, 1);
         if (flag_state == 1)
         {
             file_.read(id_extracted.data(), header_.id_length);

@@ -105,13 +105,18 @@ void Vector_Server::handle_client(int client_fd)
             Vector v;
             if (insert_parsing(v, command))
             {
-                if (file_manager.write_vector(v.id, v.data.data()))
+                if (vector_store.normalise_vector(v.data))
                 {
-                    std::cout << "Vector Inserted Successfully\n";
-                    test_read_write(file_manager);
+                    if (file_manager.write_vector(v.id, v.data.data()))
+                    {
+                        std::cout << "Vector Inserted Successfully\n";
+                        // test_read_write(file_manager);
+                    }
+                    else
+                        std::cout << "ERROR<Vector Insertion Failed>\n";
                 }
                 else
-                    std::cout << "ERROR<Vector Insertion Failed>\n";
+                    std::cout << "ERROR<Vector Normalization Failed>\n";
             }
             continue;
         }
@@ -119,27 +124,42 @@ void Vector_Server::handle_client(int client_fd)
         {
             Vector v;
             size_t top_k = 0;
-            if (query_parsing(v, top_k, command))
+            if (!query_parsing(v, top_k, command))
             {
-                std::cout << "Results-" << top_k << std::endl;
-                // do whatever
+                std::cout << "ERROR<Query Parsing Failed>\n";
+                continue;
             }
+            std::cout << "Results-" << top_k << std::endl;
+            // do whatever
             continue;
         }
         else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
         {
             std::string id = "";
-            if (delete_parsing(id, command))
+            if (!delete_parsing(id, command))
             {
-                // do delete things
-                std::cout << "DELETED\n";
+                std::cout << "ERROR<Parsing failed\n>";
+                continue;
             }
+            int64_t index = -1;
+            index = file_manager.find_by_id(id);
+            if (index == -1)
+            {
+                std::cout << "ERROR<Could not find vector>\n";
+                continue;
+            }
+            if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
+            {
+                std::cout << "ERROR<Could not delete vector\n>";
+                continue;
+            }
+            std::cout << "DELETED\n";
         }
         else if ((command.rfind("SAVE", 0)) == 0) // SAVE
         {
             if (save_parsing(command, 0))
             {
-                // do save things
+                file_manager.flush_header();
                 std::cout << "SAVED\n";
             }
         }
