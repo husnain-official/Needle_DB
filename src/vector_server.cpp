@@ -103,73 +103,103 @@ void Vector_Server::handle_client(int client_fd)
         if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
         {
             Vector v;
-            if (insert_parsing(v, command))
+            Parse_result results = insert_parsing(v, command);
+            if (!results.success)
             {
-                if (vector_store.normalise_vector(v.data))
-                {
-                    if (file_manager.write_vector(v.id, v.data.data()))
-                    {
-                        std::cout << "Vector Inserted Successfully\n";
-                        // test_read_write(file_manager);
-                    }
-                    else
-                        std::cout << "ERROR<Vector Insertion Failed>\n";
-                }
-                else
-                    std::cout << "ERROR<Vector Normalization Failed>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
             }
+            //
+            if (!vector_store.normalise_vector(v.data))
+            {
+                results.message = "ERROR <Vector Normalization Failed>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
+            if (!file_manager.write_vector(v.id, v.data.data()))
+            {
+                results.message = "ERROR <Vector Writing Failed>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
+            results.message = "INSERT <Successful>\n";
+            send(client_fd, results.message.data(), results.message.length(), 0);
             continue;
         }
         else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS F1 F2 ... Fn
         {
-            Vector v;
+            Vector query_v;
             size_t top_k = 0;
-            if (!query_parsing(v, top_k, command))
+            Parse_result results = query_parsing(query_v, top_k, command);
+            if (!results.success)
             {
-                std::cout << "ERROR<Query Parsing Failed>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            std::cout << "Results-" << top_k << std::endl;
+            std::vector<std::size_t> index(top_k);
+            std::vector<std::string> id(top_k);
+            vector_store.return_k_most_similar(query_v, top_k, index);
+            // now return the id's of top_k similar vectors
+            results.message = "QUERY <TOP-K>\n";
+            send(client_fd, results.message.data(), results.message.length(), 0);
+
             // do whatever
             continue;
         }
         else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
         {
             std::string id = "";
-            if (!delete_parsing(id, command))
+            Parse_result results;
+            results = delete_parsing(id, command);
+            if (!results.success)
             {
-                std::cout << "ERROR<Parsing failed\n>";
+                send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
             int64_t index = -1;
             index = file_manager.find_by_id(id);
             if (index == -1)
             {
-                std::cout << "ERROR<Could not find vector>\n";
+                results.message = "ERROR <Could not find vector>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
             if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
             {
-                std::cout << "ERROR<Could not delete vector\n>";
+                results.message = "ERROR <Could not delete vector\n>";
+                send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            std::cout << "DELETED\n";
+            results.message = "DELETE <Successful>\n";
+            send(client_fd, results.message.data(), results.message.length(), 0);
         }
         else if ((command.rfind("SAVE", 0)) == 0) // SAVE
         {
-            if (save_parsing(command, 0))
+            Parse_result results;
+            results = save_parsing(command, 0);
+            if (!results.success)
             {
-                file_manager.flush_header();
-                std::cout << "SAVED\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
             }
+            results.message = "SAVE <Successful>\n";
+            file_manager.flush_header();
+            send(client_fd, results.message.data(), results.message.length(), 0);
+            continue;
         }
         else if ((command.rfind("LOAD", 0)) == 0) // LOAD
         {
-            if (save_parsing(command, 1)) // save and load -> 4 chars same logic
+            Parse_result results;
+            results = save_parsing(command, 1);
+            if (!results.success) // save and load -> 4 chars same logic
             {
-                // do load things
-                std::cout << "LOADED\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
             }
+            // do load things
+            results.message = "LOAD <Successful>\n";
+            send(client_fd, results.message.data(), results.message.length(), 0);
+            continue;
         }
         //
         close(client_fd); // Close the connection after sending

@@ -16,6 +16,22 @@ struct Vector
     int dims;
     std::vector<float> data;
 };
+struct Parse_result // for vector_server
+{
+    bool success;
+    std::string message;
+};
+struct Query_result // for vector_server
+{
+    float similarity;
+    std::size_t index; // directly realted to database indexes
+                       // to eaily sort the similar vectors
+    bool operator>(Query_result &other) const
+    {
+        return (this->similarity > other.similarity);
+    }
+};
+//
 float cosine_similarity(const std::vector<float> &, const std::vector<float> &);
 class Vector_store
 {
@@ -26,12 +42,14 @@ public:
     std::vector<float> &get_vector_data(size_t);
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);
     bool normalise_vector(std::vector<float> &vec);
+    //
+    void return_k_most_similar(const Vector &, size_t, std::vector<std::size_t> &);
 };
 //----------------------------Functionality For 'Vector_Server'----------------------------------
-bool insert_parsing(Vector &, const std::string &);
-bool query_parsing(Vector &, size_t &, const std::string &);
-bool delete_parsing(std::string &, const std::string &);
-bool save_parsing(std::string &, bool);
+Parse_result insert_parsing(Vector &, const std::string &);
+Parse_result query_parsing(Vector &, size_t &, const std::string &);
+Parse_result delete_parsing(std::string &, const std::string &);
+Parse_result save_parsing(std::string &, bool);
 //----------helpers----------------
 void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 #endif

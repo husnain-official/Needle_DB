@@ -1,7 +1,7 @@
 import random
 
 def generate_insert_command():
-    vector_id = "Chunk-010"
+    vector_id = "Chunk-200"
     dims = 1056
     
     # Generate 1056 random floating point numbers between -50.0 and 50.0
