@@ -136,14 +136,25 @@ void Vector_Server::handle_client(int client_fd)
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
+            if (!vector_store.normalise_vector(query_v.data))
+            {
+                results.message = "ERROR <Vector Normalization Failed>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
             std::vector<std::size_t> index(top_k);
             std::vector<std::string> id(top_k);
-            vector_store.return_k_most_similar(query_v, top_k, index);
+            std::vector<float> similarities(top_k);
+            vector_store.return_k_most_similar(query_v, top_k, index, similarities);
             // now return the id's of top_k similar vectors
             results.message = "QUERY <TOP-K>\n";
             send(client_fd, results.message.data(), results.message.length(), 0);
-
-            // do whatever
+            vector_store.read_all_ids(id, index, top_k);
+            for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
+            {
+                results.message = id[i] + std::to_string(similarities[i]) + "\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+            }
             continue;
         }
         else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
@@ -197,6 +208,32 @@ void Vector_Server::handle_client(int client_fd)
                 continue;
             }
             // do load things
+            { // as this is the connection point for all three classes, code will be here
+                Header h = file_manager.read_header();
+                results = vector_store.set_dims_(h.dimensions);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                results = vector_store.set_count_(h.vector_count);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                // pre-allocate to avoid repeated reallocations
+                vector_store.clear();
+                // read and write
+                std::string id_buf;
+                std::vector<float> embd_buf(vector_store.get_dims());
+                for (uint64_t i = 0; i < vector_store.get_dims(); i++)
+                {
+                    if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
+                        continue; // skip deleted (flag=0) or bad records
+                    vector_store.make_entry(id_buf, embd_buf);
+                }
+            }
             results.message = "LOAD <Successful>\n";
             send(client_fd, results.message.data(), results.message.length(), 0);
             continue;

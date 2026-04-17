@@ -137,7 +137,7 @@ bool File_manager::delete_vector(uint64_t index)
 int64_t File_manager::find_by_id(const std::string &id)
 {
     // Prevent false matches if search ID is too long
-    if (id.length() >= header_.id_length)
+    if (id.length() > header_.id_length)
         return -1;
     file_.clear();
     //     Loop through each 'Record' and compare ids
