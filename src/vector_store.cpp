@@ -77,6 +77,16 @@ const std::string &Vector_store::get_id(size_t i) const
 {
     return ids_[i];
 }
+const std::size_t Vector_store::get_count() const { return count_; }
+Parse_result Vector_store::get_index_in_ram(const std::string &id)
+{
+    for (size_t i = 0; i < count_; i++)
+    {
+        if (ids_[i] == id)
+            return {true, std::to_string(i)};
+    }
+    return {false, "ERROR<Id not found in Memory>\n"};
+}
 // setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
@@ -106,6 +116,40 @@ void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_
     embeddings_.insert(embeddings_.end(), embd_buf.begin(), embd_buf.end());
     count_++;
 }
+bool Vector_store::remove_entry(const std::string &id)
+{
+    // Parse_result p;          .. Method-01
+    // p = get_index_in_ram(id);
+    // if (!p.success)
+    //     return false;
+    // std::size_t index = std::stoi(p.message);
+    // // remove
+    // ids_.erase(ids_.begin() + index);
+    // embeddings_.erase(embeddings_.begin() + index, embeddings_.begin() + index + dimensions_set);
+    // count_--;
+    // return true;             .. Method-02
+    Parse_result p = get_index_in_ram(id);
+    if (!p.success)
+        return false;
+
+    size_t target = std::stoi(p.message);
+    size_t last = count_ - 1;
+
+    // 1. Swap ids
+    std::swap(ids_[target], ids_[last]);
+
+    // 2. Swap embedding blocks in the flat array
+    float *target_block = embeddings_.data() + (target * dims_);
+    float *last_block = embeddings_.data() + (last * dims_);
+    std::swap_ranges(target_block, target_block + dims_, last_block);
+
+    // 3. Pop the last entry
+    ids_.pop_back();
+    embeddings_.resize(embeddings_.size() - dims_);
+    count_--;
+    return true;
+}
+
 bool Vector_store::insert(const Vector &v)
 {
     if (v.data.size() != dims_)
@@ -132,7 +176,7 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
         results.resize(top_n); // only keep 'n' pairs
     return results;
 }
-void Vector_store ::return_k_most_similar(const Vector &query_v, size_t top_k, std::vector<std::size_t> &return_index, std::vector<float> &similarities)
+void Vector_store ::return_k_most_similar(const Vector &query_v, size_t &top_k, std::vector<std::size_t> &return_index, std::vector<float> &similarities)
 {
     // add a check to make sure that the database has been loaded, i.e all vectors are now in the ram
     size_t stored_vectors = count_;
@@ -363,7 +407,7 @@ Parse_result save_parsing(std::string &command, bool state)
     }
     return {true, ""};
 }
-bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t top_k)
+bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k)
 {
     top_k = std::min(top_k, index.size()); // guard against index being too small
     read_ids.clear();

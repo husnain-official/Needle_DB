@@ -61,6 +61,35 @@ void Vector_Server::stop()
 }
 void Vector_Server::run()
 {
+    // AUTO-LOAD on startup
+    Header h = file_manager.read_header();
+    if (h.vector_count > 0)
+    {
+        Parse_result res = vector_store.set_dims_(h.dimensions);
+        if (res.success)
+        {
+            vector_store.clear(); // reset count_ to 0, clear arrays
+            std::string id_buf;
+            std::vector<float> embd_buf(h.dimensions);    // use h.dimensions
+            for (uint64_t i = 0; i < h.vector_count; i++) // loop over records
+            {
+                if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
+                    continue;                              // skip deleted (flag=0) — make_entry won't count these
+                vector_store.make_entry(id_buf, embd_buf); // increments count_ itself
+            }
+            std::cout << "Auto-loaded " << vector_store.get_count()
+                      << " vectors (" << h.dimensions << " dims) from disk.\n";
+            // prints LIVE vector count, not total-including-deleted
+        }
+        else
+        {
+            std::cerr << "ERROR: Failed to set dimensions from database header.\n";
+        }
+    }
+    else
+    {
+        std::cout << "No data in database found, starting fresh.\n";
+    }
     // Now we allow our port to listen
     if ((listen(server_fd, BACKLOG)) == -1)
     {
@@ -98,7 +127,7 @@ void Vector_Server::handle_client(int client_fd)
             break; // client disconnected
         // Trim trailing whitespace, \n, and \r
         command.erase(command.find_last_not_of(" \n\r\t") + 1);
-        std::cout << "Received: " << command << std::endl;
+        // std::cout << "Received: " << command << std::endl;
         //------------All Commands Conditionals-----------------
         if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
         {
@@ -122,7 +151,9 @@ void Vector_Server::handle_client(int client_fd)
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
+            vector_store.make_entry(v.id, v.data); // update the RAM as well.
             results.message = "INSERT <Successful>\n";
+            results.message = "OK\n";
             send(client_fd, results.message.data(), results.message.length(), 0);
             continue;
         }
@@ -142,19 +173,22 @@ void Vector_Server::handle_client(int client_fd)
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            std::vector<std::size_t> index(top_k);
-            std::vector<std::string> id(top_k);
-            std::vector<float> similarities(top_k);
+            std::vector<std::size_t> index;
+            index.reserve(top_k);
+            std::vector<std::string> id;
+            std::vector<float> similarities;
+            similarities.reserve(top_k); // push_back now fills from position 0
             vector_store.return_k_most_similar(query_v, top_k, index, similarities);
             // now return the id's of top_k similar vectors
-            results.message = "QUERY <TOP-K>\n";
+            results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
             send(client_fd, results.message.data(), results.message.length(), 0);
             vector_store.read_all_ids(id, index, top_k);
             for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
             {
-                results.message = id[i] + std::to_string(similarities[i]) + "\n";
+                results.message = id[i] + " " + std::to_string(similarities[i]) + "\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
             }
+            send(client_fd, "END\n", 4, 0);
             continue;
         }
         else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
@@ -177,11 +211,18 @@ void Vector_Server::handle_client(int client_fd)
             }
             if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
             {
-                results.message = "ERROR <Could not delete vector\n>";
+                results.message = "ERROR <Could not delete vector(Database)\n>";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
+            if (!vector_store.remove_entry(id))
+            {
+                results.message = "ERROR <Could not delete vector(Memory)\n>";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
             results.message = "DELETE <Successful>\n";
+            results.message = "OK\n";
             send(client_fd, results.message.data(), results.message.length(), 0);
         }
         else if ((command.rfind("SAVE", 0)) == 0) // SAVE
@@ -194,6 +235,7 @@ void Vector_Server::handle_client(int client_fd)
                 continue;
             }
             results.message = "SAVE <Successful>\n";
+            results.message = "OK\n";
             file_manager.flush_header();
             send(client_fd, results.message.data(), results.message.length(), 0);
             continue;
@@ -216,13 +258,6 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                results = vector_store.set_count_(h.vector_count);
-                if (!results.success)
-                {
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                // pre-allocate to avoid repeated reallocations
                 vector_store.clear();
                 // read and write
                 std::string id_buf;
@@ -230,17 +265,18 @@ void Vector_Server::handle_client(int client_fd)
                 for (uint64_t i = 0; i < vector_store.get_dims(); i++)
                 {
                     if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
-                        continue; // skip deleted (flag=0) or bad records
-                    vector_store.make_entry(id_buf, embd_buf);
+                        continue;                              // skip deleted (flag=0) or bad records
+                    vector_store.make_entry(id_buf, embd_buf); // this increments count itself
                 }
             }
             results.message = "LOAD <Successful>\n";
+            results.message = "OK\n";
             send(client_fd, results.message.data(), results.message.length(), 0);
             continue;
         }
-        //
-        close(client_fd); // Close the connection after sending
     }
+    close(client_fd); // Close the connection after sending
+    std::cout << "Client disconnected." << std::endl;
 }
 // testing
 void Vector_Server::test_read_write(File_manager &file_handler)

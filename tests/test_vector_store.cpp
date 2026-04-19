@@ -42,8 +42,8 @@ int main()
     // use chunk_01's vector as the query — it should return itself as top result
     // auto results = vs.brute_force_search(vs.get_vector_data(0), 10);
     // for (auto &[id, score] : results)
-    {
-        // std::cout << id << "  -> " << score << "\n";
-    }
+    // {
+    //     std::cout << id << "  -> " << score << "\n";
+    // }
     return 0;
 }

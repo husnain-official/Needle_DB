@@ -11,7 +11,7 @@
 #include <cstdint>   // for uint64_t
 //--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
 constexpr size_t dimensions_no_of_digits = 4;
-constexpr size_t dimensions_set = 1056;
+constexpr size_t dimensions_set = 1024;
 constexpr size_t id_length_set = 32;
 //--Data-Structures
 struct Vector
@@ -52,18 +52,22 @@ public:
     const float *get_embedding(size_t i) const;
     const std::string &get_id(size_t i) const;
     const std::size_t get_dims() const { return dims_; }
+    const std::size_t get_count() const;
+    Parse_result get_index_in_ram(const std::string &);
+
     // Setters
     Parse_result set_dims_(const std::size_t);
     Parse_result set_count_(const int);
     void clear();
     void make_entry(const std::string, std::vector<float>);
+    bool remove_entry(const std::string &);
     bool insert(const Vector &);
     //
     bool normalise_vector(std::vector<float> &);
-    bool read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t top_k);
+    bool read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k);
     //  Search-functions
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);
-    void return_k_most_similar(const Vector &, size_t, std::vector<std::size_t> &, std::vector<float> &);
+    void return_k_most_similar(const Vector &, size_t &, std::vector<std::size_t> &, std::vector<float> &);
 };
 //----------------------------Parsing For 'Vector_Server'----------------------------------
 Parse_result insert_parsing(Vector &, const std::string &);
