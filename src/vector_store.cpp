@@ -1,7 +1,7 @@
 #include "vector_store.h"
 //--- math and similarity functions ---
 bool Vector_store::normalise_vector(std::vector<float> &vec)
-{ // called before each save into the database, makes dot-product math easier(magnitude of each vector is 1)
+{ // called before each query/save into the database, makes dot-product math easier(magnitude of each vector is 1)
     double long vec_mag = 0;
     for (size_t i = 0; i < vec.size(); i++)
         vec_mag += (vec[i] * vec[i]);
@@ -12,7 +12,7 @@ bool Vector_store::normalise_vector(std::vector<float> &vec)
     for (size_t i = 0; i < vec.size(); i++)
         vec[i] = vec[i] / vec_mag;
     // Now, dot_similarity and cosine_similarity will give same restuls
-    // we have removed the 'magnitude' of overlap and only 'direction' exist now
+    // we have removed the 'magnitude' of overlap and only 'direction' exists now
     return true;
 }
 //  similarity-functions
@@ -77,6 +77,7 @@ const std::string &Vector_store::get_id(size_t i) const
 {
     return ids_[i];
 }
+const std::size_t Vector_store::get_dims() const { return dims_; }
 const std::size_t Vector_store::get_count() const { return count_; }
 Parse_result Vector_store::get_index_in_ram(const std::string &id)
 {
@@ -149,7 +150,6 @@ bool Vector_store::remove_entry(const std::string &id)
     count_--;
     return true;
 }
-
 bool Vector_store::insert(const Vector &v)
 {
     if (v.data.size() != dims_)
@@ -166,7 +166,8 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
 
     for (size_t i = 0; i < count_; i++) // compare 'query' with each Vector
     {
-        float similarity = cosine_similarity(query, get_embedding(i));
+        // float similarity = cosine_similarity(query, get_embedding(i));
+        float similarity = dot_similarity(query, get_embedding(i));
         results.push_back({get_id(i), similarity});
     }
     // sort the 'results' in desending order of 'cosine-similarity'

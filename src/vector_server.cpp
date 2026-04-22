@@ -13,7 +13,7 @@ bool Vector_Server::setup()
     addrinfo hints, *results, *node;
     int status = 0;
     memset(&hints, 0, sizeof(hints)); // Ensure 'hints' is empty
-    hints.ai_family = AF_UNSPEC;      // Accept either 'IPv4' or 'IPv6'
+    hints.ai_family = AF_INET;        // AF_UNSPEC;      // Accept either 'IPv4' or 'IPv6'
     hints.ai_socktype = SOCK_STREAM;  // Sock-Stream will be used -> 2 way connection needed
     hints.ai_flags = AI_PASSIVE;      // Fill up my Ip address, (I am the server)
     // Safety-Check
@@ -117,164 +117,180 @@ void Vector_Server::handle_client(int client_fd)
 {
     int buffer_len = 16384, bytes_recv = 0;
     char buffer[buffer_len];
+    std::string accumulator; // will accumulate the buffer over all recv calls unitl a '\n'
     while (true)
     {
         memset(buffer, 0, buffer_len);
         bytes_recv = (recv(client_fd, buffer, buffer_len - 1, 0));
-        std::string command(buffer);
+        std::string command;
         // safety-check
         if (bytes_recv <= 0)
-            break; // client disconnected
-        // Trim trailing whitespace, \n, and \r
-        command.erase(command.find_last_not_of(" \n\r\t") + 1);
-        // std::cout << "Received: " << command << std::endl;
-        //------------All Commands Conditionals-----------------
-        if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
+            break;                              // client disconnected
+        accumulator.append(buffer, bytes_recv); // append exactly bytes_recv, not until \0
+                                                // Process all complete commands in the accumulator
+        std::size_t newline_pos;
+        while ((newline_pos = accumulator.find('\n')) != std::string::npos)
         {
-            Vector v;
-            Parse_result results = insert_parsing(v, command);
-            if (!results.success)
-            {
-                send(client_fd, results.message.data(), results.message.length(), 0);
+            command = accumulator.substr(0, newline_pos);
+            accumulator.erase(0, newline_pos + 1); // consume this command
+
+            // Trim \r if present (Windows clients send \r\n)
+            if (!command.empty() && command.back() == '\r')
+                command.pop_back();
+
+            if (command.empty())
                 continue;
-            }
-            //
-            if (!vector_store.normalise_vector(v.data))
+
+            std::cout << "Received: " << command << std::endl;
+            //------------All Commands Conditionals-----------------
+            if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
             {
-                results.message = "ERROR <Vector Normalization Failed>\n";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            if (!file_manager.write_vector(v.id, v.data.data()))
-            {
-                results.message = "ERROR <Vector Writing Failed>\n";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            vector_store.make_entry(v.id, v.data); // update the RAM as well.
-            results.message = "INSERT <Successful>\n";
-            results.message = "OK\n";
-            send(client_fd, results.message.data(), results.message.length(), 0);
-            continue;
-        }
-        else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS F1 F2 ... Fn
-        {
-            Vector query_v;
-            size_t top_k = 0;
-            Parse_result results = query_parsing(query_v, top_k, command);
-            if (!results.success)
-            {
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            if (!vector_store.normalise_vector(query_v.data))
-            {
-                results.message = "ERROR <Vector Normalization Failed>\n";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            std::vector<std::size_t> index;
-            index.reserve(top_k);
-            std::vector<std::string> id;
-            std::vector<float> similarities;
-            similarities.reserve(top_k); // push_back now fills from position 0
-            vector_store.return_k_most_similar(query_v, top_k, index, similarities);
-            // now return the id's of top_k similar vectors
-            results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
-            send(client_fd, results.message.data(), results.message.length(), 0);
-            vector_store.read_all_ids(id, index, top_k);
-            for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
-            {
-                results.message = id[i] + " " + std::to_string(similarities[i]) + "\n";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-            }
-            send(client_fd, "END\n", 4, 0);
-            continue;
-        }
-        else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
-        {
-            std::string id = "";
-            Parse_result results;
-            results = delete_parsing(id, command);
-            if (!results.success)
-            {
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            int64_t index = -1;
-            index = file_manager.find_by_id(id);
-            if (index == -1)
-            {
-                results.message = "ERROR <Could not find vector>\n";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
-            {
-                results.message = "ERROR <Could not delete vector(Database)\n>";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            if (!vector_store.remove_entry(id))
-            {
-                results.message = "ERROR <Could not delete vector(Memory)\n>";
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            results.message = "DELETE <Successful>\n";
-            results.message = "OK\n";
-            send(client_fd, results.message.data(), results.message.length(), 0);
-        }
-        else if ((command.rfind("SAVE", 0)) == 0) // SAVE
-        {
-            Parse_result results;
-            results = save_parsing(command, 0);
-            if (!results.success)
-            {
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            results.message = "SAVE <Successful>\n";
-            results.message = "OK\n";
-            file_manager.flush_header();
-            send(client_fd, results.message.data(), results.message.length(), 0);
-            continue;
-        }
-        else if ((command.rfind("LOAD", 0)) == 0) // LOAD
-        {
-            Parse_result results;
-            results = save_parsing(command, 1);
-            if (!results.success) // save and load -> 4 chars same logic
-            {
-                send(client_fd, results.message.data(), results.message.length(), 0);
-                continue;
-            }
-            // do load things
-            { // as this is the connection point for all three classes, code will be here
-                Header h = file_manager.read_header();
-                results = vector_store.set_dims_(h.dimensions);
+                Vector v;
+                Parse_result results = insert_parsing(v, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                vector_store.clear();
-                // read and write
-                std::string id_buf;
-                std::vector<float> embd_buf(vector_store.get_dims());
-                for (uint64_t i = 0; i < vector_store.get_dims(); i++)
+                //
+                if (!vector_store.normalise_vector(v.data))
                 {
-                    if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
-                        continue;                              // skip deleted (flag=0) or bad records
-                    vector_store.make_entry(id_buf, embd_buf); // this increments count itself
+                    results.message = "ERROR <Vector Normalization Failed>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
                 }
+                if (!file_manager.write_vector(v.id, v.data.data()))
+                {
+                    results.message = "ERROR <Vector Writing Failed>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                vector_store.make_entry(v.id, v.data); // update the RAM as well.
+                results.message = "INSERT <Successful>\n";
+                results.message = "OK\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
             }
-            results.message = "LOAD <Successful>\n";
-            results.message = "OK\n";
-            send(client_fd, results.message.data(), results.message.length(), 0);
-            continue;
+            else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS F1 F2 ... Fn
+            {
+                Vector query_v;
+                size_t top_k = 0;
+                Parse_result results = query_parsing(query_v, top_k, command);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                if (!vector_store.normalise_vector(query_v.data))
+                {
+                    results.message = "ERROR <Vector Normalization Failed>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                std::vector<std::size_t> index;
+                index.reserve(top_k);
+                std::vector<std::string> id;
+                std::vector<float> similarities;
+                similarities.reserve(top_k); // push_back now fills from position 0
+                vector_store.return_k_most_similar(query_v, top_k, index, similarities);
+                // now return the id's of top_k similar vectors
+                results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                vector_store.read_all_ids(id, index, top_k);
+                for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
+                {
+                    results.message = id[i] + " " + std::to_string(similarities[i]) + "\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                }
+                send(client_fd, "END\n", 4, 0);
+                continue;
+            }
+            else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
+            {
+                std::string id = "";
+                Parse_result results;
+                results = delete_parsing(id, command);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                int64_t index = -1;
+                index = file_manager.find_by_id(id);
+                if (index == -1)
+                {
+                    results.message = "ERROR <Could not find vector>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
+                {
+                    results.message = "ERROR <Could not delete vector(Database)\n>";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                if (!vector_store.remove_entry(id))
+                {
+                    results.message = "ERROR <Could not delete vector(Memory)\n>";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                results.message = "DELETE <Successful>\n";
+                results.message = "OK\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+            }
+            else if ((command.rfind("SAVE", 0)) == 0) // SAVE
+            {
+                Parse_result results;
+                results = save_parsing(command, 0);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                results.message = "SAVE <Successful>\n";
+                results.message = "OK\n";
+                file_manager.flush_header();
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
+            else if ((command.rfind("LOAD", 0)) == 0) // LOAD
+            {
+                Parse_result results;
+                results = save_parsing(command, 1);
+                if (!results.success) // save and load -> 4 chars same logic
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                // do load things
+                { // as this is the connection point for all three classes, code will be here
+                    Header h = file_manager.read_header();
+                    results = vector_store.set_dims_(h.dimensions);
+                    if (!results.success)
+                    {
+                        send(client_fd, results.message.data(), results.message.length(), 0);
+                        continue;
+                    }
+                    vector_store.clear();
+                    // read and write
+                    std::string id_buf;
+                    std::vector<float> embd_buf(vector_store.get_dims());
+                    for (uint64_t i = 0; i < vector_store.get_dims(); i++)
+                    {
+                        if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
+                            continue;                              // skip deleted (flag=0) or bad records
+                        vector_store.make_entry(id_buf, embd_buf); // this increments count itself
+                    }
+                }
+                results.message = "LOAD <Successful>\n";
+                results.message = "OK\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
+            }
         }
     }
+
     close(client_fd); // Close the connection after sending
     std::cout << "Client disconnected." << std::endl;
 }
