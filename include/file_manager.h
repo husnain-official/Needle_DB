@@ -7,15 +7,16 @@
 #include <cstdint>
 #include <fstream>
 #include <filesystem>
-#pragma pack(push, 1) // No hidden padding!
+#pragma pack(push, 1) // No hidden padding!, keep the bytes explicit
 struct Header
 {
-    char magic_number[4];  // {'V','D','B','\0'}, required file-format
-    uint8_t version;       //  version of database
-    uint32_t dimensions;   //  dims of each vector = 1536
-    uint8_t id_length;     //  fixed bytes of "id_name"
-    uint64_t vector_count; //  records
-    uint8_t padding[6];    // future-proof
+    char magic_number[4];        // {'V','D','B','\0'}, required file-format
+    uint8_t version;             //  version of database
+    uint32_t dimensions;         //  dims of each vector = 1536/1024
+    uint8_t id_length;           //  fixed bytes of "id_name"
+    uint64_t live_vector_count;  //  records
+    uint64_t total_vector_count; //  includes entries with flag '0' / deleted vectors
+    uint8_t padding[6];          // future-proof
 };
 #pragma pack(pop)
 class File_manager
@@ -33,16 +34,27 @@ public:
     bool flush_header(); // write updated count etc.
     Header read_header();
 
-    // Maintenance
+    // Helpers/getters
     void compact(); // rewrite without tombstoned records
-    uint64_t vector_count() const;
-    uint64_t record_size() const; // dims*4 + id_len + 1
+    uint64_t get_live_vector_count() const;
+    uint64_t get_total_vector_count() const;
+    uint64_t get_record_size() const; // dims*4 + id_len + 1
 
 private:
     std::fstream file_;
     Header header_;
     uint64_t record_size_;
-    uint64_t record_offset(uint64_t index) const;
+    uint64_t get_record_offset(uint64_t index) const;
 };
 
 #endif
+/*
+    Header:
+        Size is intentionally kept a factor of 8, there was some reason for optimization, search it up later and properly document in
+        in the final readme or better in the documentation file
+
+
+
+
+
+*/

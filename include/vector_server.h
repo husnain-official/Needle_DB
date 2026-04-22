@@ -17,6 +17,8 @@
 #include <iostream>
 #include "vector_store.h"
 #include "file_manager.h"
+#include "similarities.hpp"
+#include "command_parser.h"
 //
 #define BACKLOG (10) // max no of client waiting in queue
 class Vector_Server
@@ -29,8 +31,7 @@ public:
     bool setup();
     void run();
     void stop();
-    // testing
-    void test_read_write(File_manager &file_handler);
+    //
 
 private:
     int server_fd;
@@ -59,3 +60,10 @@ private:
 // };
 
 #endif
+/*
+        The Reverse-Proxy Problem:
+            Document this thoroughly and also provide commands to enable the solution in readme.md
+        The Format:
+            In final documentation and readme, state this very cleanly
+
+*/

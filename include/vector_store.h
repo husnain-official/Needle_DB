@@ -6,7 +6,6 @@
 #include <iostream>
 #include <cmath>     // for sqrt
 #include <algorithm> // for std::sort and std::partial sort
-#include <sstream>   // for parsing logic of commands(  ss not used can be removed, confirm later)
 #include <numeric>   // for std::inner_product (highly optimised dot-product)
 #include <stdexcept> // for thorw-catch blocks in parsing logic
 #include <cstdint>   // for uint64_t
@@ -37,11 +36,6 @@ struct Query_result // for vector_server use(only)
         return (this->similarity > other.similarity);
     }
 };
-//--Similarity functions
-float cosine_similarity(const std::vector<float> &, const std::vector<float> &);
-float cosine_similarity(const std::vector<float> &, const float *);
-float dot_similarity(const std::vector<float> &, const std::vector<float> &);
-float dot_similarity(const std::vector<float> &, const float *);
 // --Vector-store class
 class Vector_store
 {
@@ -74,11 +68,4 @@ public:
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);
     void return_k_most_similar(const Vector &, size_t &, std::vector<std::size_t> &, std::vector<float> &);
 };
-//----------------------------Parsing For 'Vector_Server' ----------------------------------
-Parse_result insert_parsing(Vector &, const std::string &);
-Parse_result query_parsing(Vector &, size_t &, const std::string &);
-Parse_result delete_parsing(std::string &, const std::string &);
-Parse_result save_parsing(std::string &, bool);
-//--helpers
-void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 #endif

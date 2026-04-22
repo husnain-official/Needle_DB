@@ -6,6 +6,8 @@
 #include "json.hpp"
 #include "file_manager.h"
 #include "test_file_manager.h"
+#include "similarities.hpp"
+#include "command_parser.h"
 using namespace std;
 int main()
 {

@@ -63,15 +63,15 @@ void Vector_Server::run()
 {
     // AUTO-LOAD on startup
     Header h = file_manager.read_header();
-    if (h.vector_count > 0)
+    if (h.total_vector_count > 0)
     {
         Parse_result res = vector_store.set_dims_(h.dimensions);
         if (res.success)
         {
-            vector_store.clear(); // reset count_ to 0, clear arrays
+            vector_store.clear(); // reset count_(RAM) to 0, clear arrays
             std::string id_buf;
-            std::vector<float> embd_buf(h.dimensions);    // use h.dimensions
-            for (uint64_t i = 0; i < h.vector_count; i++) // loop over records
+            std::vector<float> embd_buf(h.dimensions);          // use h.dimensions
+            for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records
             {
                 if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
                     continue;                              // skip deleted (flag=0) — make_entry won't count these
@@ -141,7 +141,7 @@ void Vector_Server::handle_client(int client_fd)
             if (command.empty())
                 continue;
 
-            std::cout << "Received: " << command << std::endl;
+            // std::cout << "Received: " << command << std::endl;
             //------------All Commands Conditionals-----------------
             if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
             {
@@ -276,7 +276,7 @@ void Vector_Server::handle_client(int client_fd)
                     // read and write
                     std::string id_buf;
                     std::vector<float> embd_buf(vector_store.get_dims());
-                    for (uint64_t i = 0; i < vector_store.get_dims(); i++)
+                    for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
                     {
                         if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
                             continue;                              // skip deleted (flag=0) or bad records
@@ -287,69 +287,11 @@ void Vector_Server::handle_client(int client_fd)
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
-            }
-        }
-    }
+            } // 'load' end
+        } // inner loop end
+    } // outer loop end
 
     close(client_fd); // Close the connection after sending
     std::cout << "Client disconnected." << std::endl;
 }
-// testing
-void Vector_Server::test_read_write(File_manager &file_handler)
-{
-    std::cout << "\n--- RUNNING ISOLATED DB TEST ---\n";
-
-    // 1. Create a completely unique, predictable test vector
-    std::string test_id = "Isolated-777";
-    std::vector<float> test_embds(1056);
-    for (int i = 0; i < 1056; i++)
-    {
-        test_embds[i] = (float)i * 0.5f; // Generates: 0.0, 0.5, 1.0, 1.5...
-    }
-
-    // 2. Get the exact index where this new vector is ABOUT to be saved
-    uint64_t target_index = file_handler.vector_count();
-
-    // 3. Insert it directly into the database
-    bool write_success = file_handler.write_vector(test_id, test_embds.data());
-    if (!write_success)
-    {
-        std::cout << "❌ TEST FAILED: Could not write to file.\n";
-        return;
-    }
-
-    // 4. Read it back from that EXACT index
-    std::string retrieved_id = "";
-    std::vector<float> retrieved_embds(1056, 0);
-    bool read_success = file_handler.read_vector(target_index, retrieved_id, retrieved_embds.data());
-
-    if (!read_success)
-    {
-        std::cout << "❌ TEST FAILED: Could not read from index " << target_index << ".\n";
-        return;
-    }
-
-    // 5. Compare Results
-    if (retrieved_id != test_id)
-    {
-        std::cout << "❌ TEST FAILED: ID mismatch! Expected '" << test_id << "', got '" << retrieved_id << "'\n";
-        return;
-    }
-
-    int error_count = 0;
-    for (size_t i = 0; i < 5; i++)
-    { // Check the first 5 floats
-        if (std::abs(test_embds[i] - retrieved_embds[i]) > 1e-5)
-        {
-            std::cout << "❌ TEST FAILED at dim " << i
-                      << "! Expected: " << test_embds[i]
-                      << " | Got: " << retrieved_embds[i] << "\n";
-            error_count++;
-        }
-    }
-
-    if (error_count == 0)
-    {
-        std::cout << "✅ ISOLATED TEST PASSED! The File_manager is reading and writing perfectly.\n";
-    }
-}
+//
