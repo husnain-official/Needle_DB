@@ -19,6 +19,7 @@
 #include "file_manager.h"
 #include "similarities.hpp"
 #include "command_parser.h"
+#include "types.h"
 //
 #define BACKLOG (10) // max no of client waiting in queue
 class Vector_Server

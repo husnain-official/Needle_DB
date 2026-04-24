@@ -1,18 +1,20 @@
 #include "file_manager.h"
 // constructor
-File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_len)
+File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs)
 {
     // Purpose: Boot-up the litteral 'file-manager'
     // First initilize the header
     header_.dimensions = dims;
     header_.id_length = id_len;
+    header_.kv_length = kv_len;
+    header_.max_kv = kv_max_pairs;
     memcpy(header_.magic_number, "VDB", 4);
     memset(header_.padding, 0, sizeof(header_.padding));
     header_.total_vector_count = 0;
     header_.live_vector_count = 0;
-    header_.version = 2;
+    header_.version = 3;
     // Initilize other elements
-    record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions);
+    record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (header_.kv_length * (header_.max_kv * 2));
     if (!(std::filesystem::exists(path)))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
@@ -32,9 +34,13 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     {
         throw std::runtime_error("Invalid file format: Magic number mismatch.");
     }
-    if (header_.dimensions != dims || header_.id_length != id_len)
+    if (header_.version != 3)
     {
-        throw std::runtime_error("Schema mismatch: File dimensions/ID length do not match provided arguments.");
+        throw std::runtime_error("Schema mismatch: Incompatible database version. Expected Version 3.");
+    }
+    if (header_.dimensions != dims or header_.id_length != id_len or header_.kv_length != kv_len or header_.max_kv != kv_max_pairs)
+    {
+        throw std::runtime_error("Schema mismatch: File dimensions/ID length/Meta-data do not match provided arguments.");
     }
     std::cout << "Data-Base path opened successfully\n";
 }
@@ -44,7 +50,7 @@ Header File_manager::read_header()
     Header h;
     file_.clear();
     file_.seekg(0);
-    file_.read(reinterpret_cast<char *>(&h), sizeof(Header)); // Read the whole 24 bytes
+    file_.read(reinterpret_cast<char *>(&h), sizeof(Header));
     return h;
 }
 bool File_manager::flush_header()
@@ -65,11 +71,12 @@ void File_manager::compact()
 {
 }
 //  Core-Operations
-bool File_manager::write_vector(const std::string &id, const float *embeddings) // .data() must be passed
+bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr) // .data() must be passed
 {
     file_.clear();
     // 1.   move the write cursor to the eof
-    file_.seekp(get_record_offset(header_.total_vector_count));
+    // file_.seekp(get_record_offset(header_.total_vector_count));
+    file_.seekp(0, std::ios::end);
     // 2.   intilize the flag
     char active_flag = 1;
     file_.write(&active_flag, 1);
@@ -78,7 +85,32 @@ bool File_manager::write_vector(const std::string &id, const float *embeddings) 
     size_t chars_to_copy = std::min(id.length(), static_cast<size_t>(header_.id_length));
     std::copy(id.begin(), id.begin() + chars_to_copy, id_padded.begin());
     file_.write(id_padded.data(), header_.id_length);
-    // 4.   WRITE:EMBEDDINGS
+    // 4.   WRITE:META-DATA
+    if (!mdata_arr)
+    {
+        Metadata_entry mdata = {0};
+        for (int i = 0; i < header_.max_kv; i++)
+            file_.write(reinterpret_cast<char *>(&mdata), header_.kv_length * 2);
+    }
+    else
+    {
+        Metadata_entry mdata;
+        for (int i = 0; i < header_.max_kv; i++)
+        {
+            // i) add padding to the mdata
+            memset(&mdata, 0, sizeof(mdata));
+            // ii) measure source length
+            size_t key_len = strnlen(mdata_arr[i].key, header_.kv_length);
+            size_t val_len = strnlen(mdata_arr[i].value, header_.kv_length);
+            // iii) copy data
+            memcpy(mdata.key, mdata_arr[i].key, key_len);
+            memcpy(mdata.value, mdata_arr[i].value, val_len);
+            // iv) Write these values into the file
+            file_.write(reinterpret_cast<char *>(mdata.key), header_.kv_length);
+            file_.write(reinterpret_cast<char *>(mdata.value), header_.kv_length);
+        }
+    }
+    // 5.   WRITE:EMBEDDINGS
     file_.write(reinterpret_cast<const char *>(embeddings), (sizeof(float) * header_.dimensions));
     // 5.   Cleanup
     if (!file_.good())
@@ -88,7 +120,7 @@ bool File_manager::write_vector(const std::string &id, const float *embeddings) 
     flush_header();
     return file_.good();
 }
-bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_out)
+bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_out, Metadata_entry *mdata_arr)
 {
     file_.clear();
     // 0.   Check
@@ -108,9 +140,47 @@ bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_
     size_t first_null = id_out.find('\0'); //      trim the extra entries of
     if (first_null != std::string::npos)
         id_out.resize(first_null);
-    //  3.  Read the embeddings
+    //  3.  Read the meta-data
+    // i) necessary vars
+    std::vector<char> key(header_.kv_length, '\0');
+    std::vector<char> value(header_.kv_length, '\0');
+    // ii) read
+    // for (int i = 0; i < header_.max_kv; i++)
+    // {
+    //     file_.read(key.data(), header_.kv_length);
+    //     auto key_it = std::find(key.begin(), key.end(), '\0');
+    //     size_t key_len = std::distance(key.begin(), key_it);
+    //     memset(mdata_arr[i].key, 0, header_.kv_length);
+    //     memcpy(mdata_arr[i].key, key.data(), key_len);
+    //     //
+    //     file_.read(value.data(), header_.kv_length);
+    //     auto val_it = std::find(value.begin(), value.end(), '\0');
+    //     size_t val_len = std::distance(value.begin(), val_it);
+    //     memset(mdata_arr[i].value, 0, header_.kv_length);
+    //     memcpy(mdata_arr[i].value, value.data(), key_len);
+    //     //
+    // }
+    // iii) alternative
+    if (!mdata_arr)
+    {
+        file_.seekg(header_.kv_length * 2 * header_.max_kv, std::ios::cur);
+    }
+    else
+    {
+        for (int i = 0; i < header_.max_kv; i++)
+        {
+            // Zero out the struct first to ensure clean padding
+            std::memset(&mdata_arr[i], 0, sizeof(mdata_arr[i]));
+
+            // Read directly from the file into the struct's memory
+            file_.read(reinterpret_cast<char *>(mdata_arr[i].key), header_.kv_length);
+            file_.read(reinterpret_cast<char *>(mdata_arr[i].value), header_.kv_length);
+            // it is the callers responsibility to properly manage the C - string, as it may not have a null terminator
+        }
+    }
+    //  4.  Read the embeddings
     file_.read(reinterpret_cast<char *>(data_out), sizeof(float) * header_.dimensions);
-    //  4.  Return file state
+    //  5.  Return file state
     return file_.good();
 }
 bool File_manager::delete_vector(uint64_t index)

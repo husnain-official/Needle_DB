@@ -70,12 +70,13 @@ void Vector_Server::run()
         {
             vector_store.clear(); // reset count_(RAM) to 0, clear arrays
             std::string id_buf;
+            Metadata_entry mdata_arr[3];
             std::vector<float> embd_buf(h.dimensions);          // use h.dimensions
             for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records
             {
-                if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
-                    continue;                              // skip deleted (flag=0) — make_entry won't count these
-                vector_store.make_entry(id_buf, embd_buf); // increments count_ itself
+                if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
+                    continue;                                         // skip deleted (flag=0) — make_entry won't count these
+                vector_store.make_entry(id_buf, embd_buf, mdata_arr); // increments count_ itself
             }
             std::cout << "Auto-loaded " << vector_store.get_count()
                       << " vectors (" << h.dimensions << " dims) from disk.\n";
@@ -115,17 +116,26 @@ void Vector_Server::run()
 }
 void Vector_Server::handle_client(int client_fd)
 {
-    int buffer_len = 16384, bytes_recv = 0;
+    int buffer_len = 16384;
+    int64_t bytes_recv = 0;
     char buffer[buffer_len];
     std::string accumulator; // will accumulate the buffer over all recv calls unitl a '\n'
     while (true)
     {
         memset(buffer, 0, buffer_len);
         bytes_recv = (recv(client_fd, buffer, buffer_len - 1, 0));
+        // std::cout << buffer;
         std::string command;
         // safety-check
         if (bytes_recv <= 0)
-            break;                              // client disconnected
+        {
+            if (!accumulator.empty())
+            {
+                std::cout << "Warning: Client disconnected, but left incomplete data: " << std::endl;
+                //   << accumulator << std::endl;
+            }
+            break;
+        } // client disconnected
         accumulator.append(buffer, bytes_recv); // append exactly bytes_recv, not until \0
                                                 // Process all complete commands in the accumulator
         std::size_t newline_pos;
@@ -288,7 +298,9 @@ void Vector_Server::handle_client(int client_fd)
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             } // 'load' end
+            // std::cout << "\nEnd of inner loop, command does not match\n";
         } // inner loop end
+        // std::cout << "\nEnd of outer loop, no'\n'yet\n";
     } // outer loop end
 
     close(client_fd); // Close the connection after sending

@@ -28,6 +28,11 @@ const std::string &Vector_store::get_id(size_t i) const
 }
 const std::size_t Vector_store::get_dims() const { return dims_; }
 const std::size_t Vector_store::get_count() const { return count_; }
+// Parse_result Vector_store::get_metadata_entry(std::string id) const  // getter later first setters
+// {
+//     Metadata_entry m[3];
+//     m[0].key = metadata_.find(id);
+// }
 Parse_result Vector_store::get_index_in_ram(const std::string &id)
 {
     for (size_t i = 0; i < count_; i++)
@@ -52,32 +57,54 @@ Parse_result Vector_store::set_count_(const int count)
     this->count_ = count;
     return {true, ""};
 }
+void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::string &id)
+{
+    /*
+    for refrence, make sure when setting they are fully set to '\0' and then the values are copied in them
+    for writing, make it such that only non '\0' values remain(Responsibility of write_vector and insert_parsing)
+    potential bugs: 1) set char[31] = '\0'. if size =>32   2) first insert key, if success then this
+    */
+    // if no metadata provided{nullptr}, none to save, return
+    if (mdata_arr)
+        return;
+    //  setup the inner map
+    std::map<std::string, std::string> inner_key_val;
+    for (int i = 0; i < meta_data_kp_pairs_set; i++)
+    {
+        // skip empty key/values
+        if (mdata_arr[i].key[0] == '\0')
+            continue;
+        // overflow prevention
+        size_t key_len = strnlen(mdata_arr[i].key, meta_data_length_set);
+        size_t val_len = strnlen(mdata_arr[i].value, meta_data_length_set);
+        //  safe-strings
+        std::string safe_key(mdata_arr[i].key, key_len);
+        std::string safe_val(mdata_arr[i].value, val_len);
+        //
+        inner_key_val[safe_key] = safe_val;
+    }
+    // now setup the outer map
+    metadata_[id] = std::move(inner_key_val);
+    return;
+}
 void Vector_store::clear()
 {
     ids_.clear();
     embeddings_.clear();
+    metadata_.clear();
     count_ = 0;
     ids_.reserve(count_);
     embeddings_.reserve(count_ * dims_);
 }
-void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_buf)
+void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_buf, const Metadata_entry *mdata_arr)
 {
     ids_.push_back(id_buf);
     embeddings_.insert(embeddings_.end(), embd_buf.begin(), embd_buf.end());
+    set_metadata(mdata_arr, id_buf);
     count_++;
 }
 bool Vector_store::remove_entry(const std::string &id)
 {
-    // Parse_result p;          .. Method-01
-    // p = get_index_in_ram(id);
-    // if (!p.success)
-    //     return false;
-    // std::size_t index = std::stoi(p.message);
-    // // remove
-    // ids_.erase(ids_.begin() + index);
-    // embeddings_.erase(embeddings_.begin() + index, embeddings_.begin() + index + dimensions_set);
-    // count_--;
-    // return true;             .. Method-02
     Parse_result p = get_index_in_ram(id);
     if (!p.success)
         return false;
@@ -96,16 +123,10 @@ bool Vector_store::remove_entry(const std::string &id)
     // 3. Pop the last entry
     ids_.pop_back();
     embeddings_.resize(embeddings_.size() - dims_);
+
+    // 4. Delete metadata
+    metadata_.erase(id);
     count_--;
-    return true;
-}
-bool Vector_store::insert(const Vector &v)
-{
-    if (v.data.size() != dims_)
-        return false;
-    embeddings_.insert(embeddings_.end(), v.data.begin(), v.data.end());
-    ids_.push_back(v.id);
-    count_++;
     return true;
 }
 //  search

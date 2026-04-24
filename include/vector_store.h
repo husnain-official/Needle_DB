@@ -2,6 +2,7 @@
 #define VECTOR_STORE
 #include <vector>
 #include <string>
+#include <cstring>
 #include <map>
 #include <iostream>
 #include <cmath>     // for sqrt
@@ -9,39 +10,20 @@
 #include <numeric>   // for std::inner_product (highly optimised dot-product)
 #include <stdexcept> // for thorw-catch blocks in parsing logic
 #include <cstdint>   // for uint64_t
+#include "types.h"   // for convinient structs
 //--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
 constexpr size_t dimensions_no_of_digits = 4;
 constexpr size_t dimensions_set = 1024;
 constexpr size_t id_length_set = 32;
-//--Data-Structures
-struct Vector
-{
-    std::string id;
-    int dims;
-    // std::map<std::string, std::string> metadata;
-    std::vector<float> data;
-};
-struct Parse_result // Helper to identify success/failure of a function call/parse
-{
-    bool success;
-    std::string message; // Error if failed.
-};
-struct Query_result // for vector_server use(only)
-{
-    float similarity;
-    std::size_t index; // directly realted to database indexes
-                       // to eaily sort the similar vectors
-    bool operator>(const Query_result &other) const
-    {
-        return (this->similarity > other.similarity);
-    }
-};
+constexpr size_t meta_data_length_set = 32;
+constexpr size_t meta_data_kp_pairs_set = 4;
+
 // --Vector-store class
 class Vector_store
 {
     std::vector<std::string> ids_;
     std::vector<float> embeddings_;
-    // std::vector<std::map<std::string, std::string>> metadata_;
+    std::map<std::string, std::map<std::string, std::string>> metadata_;
     std::size_t dims_;
     std::size_t count_;
 
@@ -52,13 +34,15 @@ public:
     const std::string &get_id(size_t i) const;
     const std::size_t get_dims() const;
     const std::size_t get_count() const;
+    Parse_result get_metadata_entry() const;
     Parse_result get_index_in_ram(const std::string &);
 
     // Setters
     Parse_result set_dims_(const std::size_t);
     Parse_result set_count_(const int);
+    void set_metadata(const Metadata_entry *, const std::string &id);
     void clear();
-    void make_entry(const std::string, std::vector<float>);
+    void make_entry(const std::string, std::vector<float>, const Metadata_entry *mdata_arr);
     bool remove_entry(const std::string &);
     bool insert(const Vector &);
     //
@@ -69,3 +53,9 @@ public:
     void return_k_most_similar(const Vector &, size_t &, std::vector<std::size_t> &, std::vector<float> &);
 };
 #endif
+/*
+        1.  i am not sure if i should change std::map metadata to a unordered_map
+        2.  removed 'insert' it was a full copy of 'make_entry'
+        3.  isnt cosine similarity completely useless now, why do i even have it in the code still ?
+        4.
+*/

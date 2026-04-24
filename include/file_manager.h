@@ -4,9 +4,12 @@
 #include <string>
 #include <cstring>
 #include <vector>
-#include <cstdint>
-#include <fstream>
-#include <filesystem>
+#include <cstdint>    // for uint64_t
+#include <fstream>    // for file handeling
+#include <filesystem> // for verifying if database's existance
+#include <algorithm>  // for std::find
+#include <iterator>   // for std::distance
+#include "types.h"    // for convinient structs
 #pragma pack(push, 1) // No hidden padding!, keep the bytes explicit
 struct Header
 {
@@ -14,19 +17,21 @@ struct Header
     uint8_t version;             //  version of database
     uint32_t dimensions;         //  dims of each vector = 1536/1024
     uint8_t id_length;           //  fixed bytes of "id_name"
+    uint8_t kv_length;           //  fixed bytes of 'keys' and 'values' for metadata
+    uint8_t max_kv;              //  fixed number of key value pairs per record
     uint64_t live_vector_count;  //  records
     uint64_t total_vector_count; //  includes entries with flag '0' / deleted vectors
-    uint8_t padding[6];          // future-proof
+    uint8_t padding[4];          //  future-proof
 };
 #pragma pack(pop)
 class File_manager
 {
 public:
-    explicit File_manager(const std::string &path, uint32_t dims, uint8_t id_len = 32);
+    explicit File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs);
 
     // Core operations — all O(1) with fixed record size, except find by id O(n)
-    bool write_vector(const std::string &id, const float *data);
-    bool read_vector(uint64_t index, std::string &id_out, float *data_out);
+    bool write_vector(const std::string &id, const float *data, const Metadata_entry *mdata_arr);
+    bool read_vector(uint64_t index, std::string &id_out, float *data_out, Metadata_entry *mdata_arr);
     bool delete_vector(uint64_t index);        // sets tombstone bit
     int64_t find_by_id(const std::string &id); // returns record index or -1
 
@@ -53,8 +58,11 @@ private:
         Size is intentionally kept a factor of 8, there was some reason for optimization, search it up later and properly document in
         in the final readme or better in the documentation file
 
+        Only plain old data (POD) allowed in header
 
+        Endianness (Platform Independence)
 
+        in read vector it is the callers responsibility to properly manage the C-string, as it may not have a null terminator
 
 
 */
