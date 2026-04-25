@@ -8,6 +8,7 @@
 #include "test_file_manager.h"
 #include "similarities.hpp"
 #include "command_parser.h"
+#include "types.h"
 using namespace std;
 int main()
 {
@@ -39,7 +40,7 @@ int main()
         v.id = item["id"];
         v.dims = item["dims"];
         v.data = item["data"].get<std::vector<float>>();
-        vs.insert(v);
+        // vs.insert(v);
     }
     // use chunk_01's vector as the query — it should return itself as top result
     // auto results = vs.brute_force_search(vs.get_vector_data(0), 10);

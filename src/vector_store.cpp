@@ -65,7 +65,7 @@ void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::stri
     potential bugs: 1) set char[31] = '\0'. if size =>32   2) first insert key, if success then this
     */
     // if no metadata provided{nullptr}, none to save, return
-    if (mdata_arr)
+    if (!mdata_arr)
         return;
     //  setup the inner map
     std::map<std::string, std::string> inner_key_val;
@@ -129,6 +129,20 @@ bool Vector_store::remove_entry(const std::string &id)
     count_--;
     return true;
 }
+bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k)
+{
+    top_k = std::min(top_k, index.size()); // guard against index being too small
+    read_ids.clear();
+    read_ids.reserve(top_k);
+    for (std::size_t i = 0; i < top_k; i++)
+    {
+        if (index[i] >= ids_.size())
+            return false; // stale or invalid index
+        read_ids.push_back(ids_[index[i]]);
+    }
+    return true;
+}
+
 //  search
 std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(const std::vector<float> &query, const int top_n)
 {

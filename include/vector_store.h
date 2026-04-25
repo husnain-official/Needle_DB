@@ -16,7 +16,7 @@ constexpr size_t dimensions_no_of_digits = 4;
 constexpr size_t dimensions_set = 1024;
 constexpr size_t id_length_set = 32;
 constexpr size_t meta_data_length_set = 32;
-constexpr size_t meta_data_kp_pairs_set = 4;
+constexpr size_t meta_data_kp_pairs_set = 3;
 
 // --Vector-store class
 class Vector_store
@@ -44,7 +44,6 @@ public:
     void clear();
     void make_entry(const std::string, std::vector<float>, const Metadata_entry *mdata_arr);
     bool remove_entry(const std::string &);
-    bool insert(const Vector &);
     //
     bool normalise_vector(std::vector<float> &);
     bool read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k);

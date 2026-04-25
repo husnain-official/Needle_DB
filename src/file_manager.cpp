@@ -15,6 +15,7 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     header_.version = 3;
     // Initilize other elements
     record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (header_.kv_length * (header_.max_kv * 2));
+    // record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (sizeof(Metadata_entry)); thiss will make it not work
     if (!(std::filesystem::exists(path)))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
@@ -145,22 +146,6 @@ bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_
     std::vector<char> key(header_.kv_length, '\0');
     std::vector<char> value(header_.kv_length, '\0');
     // ii) read
-    // for (int i = 0; i < header_.max_kv; i++)
-    // {
-    //     file_.read(key.data(), header_.kv_length);
-    //     auto key_it = std::find(key.begin(), key.end(), '\0');
-    //     size_t key_len = std::distance(key.begin(), key_it);
-    //     memset(mdata_arr[i].key, 0, header_.kv_length);
-    //     memcpy(mdata_arr[i].key, key.data(), key_len);
-    //     //
-    //     file_.read(value.data(), header_.kv_length);
-    //     auto val_it = std::find(value.begin(), value.end(), '\0');
-    //     size_t val_len = std::distance(value.begin(), val_it);
-    //     memset(mdata_arr[i].value, 0, header_.kv_length);
-    //     memcpy(mdata_arr[i].value, value.data(), key_len);
-    //     //
-    // }
-    // iii) alternative
     if (!mdata_arr)
     {
         file_.seekg(header_.kv_length * 2 * header_.max_kv, std::ios::cur);
@@ -197,6 +182,7 @@ bool File_manager::delete_vector(uint64_t index)
     // 3.cleanup
     header_.live_vector_count--;
     file_.flush();
+    flush_header();
     // 4.   Return file-state
     return file_.good();
 }
@@ -221,7 +207,7 @@ int64_t File_manager::find_by_id(const std::string &id)
         if (flag_state == 1)
         {
             file_.read(id_extracted.data(), header_.id_length);
-            if (std::strncmp(id_extracted.data(), id.c_str(), header_.id_length) == 0)
+            if (std::strncmp(id_extracted.data(), id.c_str(), std::min(id.length() + 1, (size_t)header_.id_length)) == 0)
                 return i;
         }
     }

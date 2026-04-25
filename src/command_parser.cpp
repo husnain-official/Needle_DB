@@ -1,7 +1,16 @@
 #include "command_parser.h"
+//------------Helpers----------------
+void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
+{
+    next_space_index = command.find(' ', index);
+    to_move = next_space_index - index;
+}
+void next_equal_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
+{
+    next_space_index = command.find('=', index);
+    to_move = next_space_index - index;
+}
 //----------------------------Functionality For 'Vector_Server'----------------------------------
-// add try-catch blocks in all of these(later) {solved}
-// another probleam all errors are printed to the server and not the client {solved}
 Parse_result insert_parsing(Vector &v, const std::string &command)
 {
     try
@@ -38,7 +47,6 @@ Parse_result insert_parsing(Vector &v, const std::string &command)
         index = next_space_index + 1; // 40(if to_move was 33)
         next_space_changes(command, index, next_space_index, to_move);
         //  Check-03
-
         if ((to_move != dimensions_no_of_digits) or (next_space_index == std::string::npos))
         {
             //  we should reset v1.id but unnecessary
@@ -50,11 +58,62 @@ Parse_result insert_parsing(Vector &v, const std::string &command)
         {
             return {false, "ERROR <Invalid dimensions entered\n>"};
         }
+        index = next_space_index + 1; //  now standing at the first char of the 1st key
+        //  META-DATA new PARSING
+        //  Psudo-code
+        //  make a loop -> check if a '=' sign is found in the next 32chars(excluding the 1st one,where we currently stand)
+        //  -> if it does find its index -> take your current position and that index and [ , ) into a substr, thats your key
+        //  -> now find the index of next space ' ' and the data between [ , ) into a substr, thats your value
+        //  -> repeat the loop for the set fixed kv pairs, PROBLEM -> command_parser.cpp is a stand alone file, it does not know preset
+        //  constants
+        //  index right now is first char of either metadata or float, if no metadat
+        constexpr int max_kv = sizeof(v.metadata) / sizeof(v.metadata[0]);
+        std::string temp_str;
+        memset(v.metadata, 0, sizeof(v.metadata));
+        for (int i = 0; i < max_kv; i++)
+        {
+            size_t lookahead = command.find('=', index);
+            if (lookahead == std::string::npos || lookahead - index > 32)
+            {
+                break; // no more metadata, floats start here
+            }
+            next_equal_changes(command, index, next_space_index, to_move);
+            if (to_move < 1)
+            {
+                return {false, "ERROR<Meta-data key size is 0>\n"};
+            }
+            if (to_move > 32)
+            {
+                return {false, "ERROR<Meta-data key size exceeds 32>\n"};
+            }
+            temp_str = command.substr(index, to_move);
+            memset(v.metadata[i].key, 0, sizeof(v.metadata[i].key));
+            memcpy(v.metadata[i].key, temp_str.data(), to_move);
+            // do the same for value
+            index = next_space_index + 1;
+            next_space_changes(command, index, next_space_index, to_move);
+            if (next_space_index == std::string::npos)
+            {
+                return {false, "ERROR<Incorrect Meta-Data format>\n"};
+            }
+            if (to_move < 1)
+            {
+                return {false, "ERROR<Meta-data value size is 0>\n"};
+            }
+            if (to_move > 32)
+            {
+                return {false, "ERROR<Meta-data value size exceeds 32>\n"};
+            }
+            temp_str = command.substr(index, to_move);
+            memset(v.metadata[i].value, 0, sizeof(v.metadata[i].value));
+            memcpy(v.metadata[i].value, temp_str.data(), to_move);
+            index = next_space_index + 1;
+            //
+        }
         // Embeddings loop
         v.data.resize(dimensions_set);
         for (std::size_t i = 0; i < dimensions_set; i++)
         {
-            index = next_space_index + 1;
             if (i != (dimensions_set - 1))
             {
                 next_space_changes(command, index, next_space_index, to_move);
@@ -67,10 +126,14 @@ Parse_result insert_parsing(Vector &v, const std::string &command)
             }
             else
             {
-                if (command.size() >= index)
+                if (command.size() > index)
                     to_move = command.size() - index;
+                else
+                    return {false, "ERROR <Command string too short for given dimensions>\n"};
+
                 v.data[i] = std::stof(command.substr(index, to_move));
             }
+            index = next_space_index + 1;
         }
         return {true, ""};
     }
@@ -198,23 +261,4 @@ Parse_result save_parsing(std::string &command, bool state)
             return {false, "ERROR <Invalid format for LOAD>\n"};
     }
     return {true, ""};
-}
-bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k)
-{
-    top_k = std::min(top_k, index.size()); // guard against index being too small
-    read_ids.clear();
-    read_ids.reserve(top_k);
-    for (std::size_t i = 0; i < top_k; i++)
-    {
-        if (index[i] >= ids_.size())
-            return false; // stale or invalid index
-        read_ids.push_back(ids_[index[i]]);
-    }
-    return true;
-}
-//------------Helpers----------------
-void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
-{
-    next_space_index = command.find(' ', index);
-    to_move = next_space_index - index;
 }

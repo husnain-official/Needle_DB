@@ -10,7 +10,7 @@ int main()
     Vector_store database;
     //
     std::string path = "data/database.vdb";
-    File_manager file_handler(path, dimensions_set, id_length_set);
+    File_manager file_handler(path, dimensions_set, id_length_set, meta_data_length_set, meta_data_kp_pairs_set);
     //
     std::string port = "8080";
     Vector_Server server(port, database, file_handler);

@@ -116,7 +116,7 @@ void Vector_Server::run()
 }
 void Vector_Server::handle_client(int client_fd)
 {
-    int buffer_len = 16384;
+    int buffer_len = 16384; // one entry is approximately 4kB
     int64_t bytes_recv = 0;
     char buffer[buffer_len];
     std::string accumulator; // will accumulate the buffer over all recv calls unitl a '\n'
@@ -153,7 +153,7 @@ void Vector_Server::handle_client(int client_fd)
 
             // std::cout << "Received: " << command << std::endl;
             //------------All Commands Conditionals-----------------
-            if ((command.rfind("INSERT", 0)) == 0) // INSERT ID_NAME DIMS F1 F2 F3 ... Fn
+            if ((command.rfind("INSERT", 0)) == 0) // INSERT ID DIMS key1=abc key2=def key3=xyz F1 F2 F3 ... Fn
             {
                 Vector v;
                 Parse_result results = insert_parsing(v, command);
@@ -169,13 +169,13 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!file_manager.write_vector(v.id, v.data.data()))
+                if (!file_manager.write_vector(v.id, v.data.data(), v.metadata))
                 {
                     results.message = "ERROR <Vector Writing Failed>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                vector_store.make_entry(v.id, v.data); // update the RAM as well.
+                vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.
                 results.message = "INSERT <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
@@ -286,11 +286,12 @@ void Vector_Server::handle_client(int client_fd)
                     // read and write
                     std::string id_buf;
                     std::vector<float> embd_buf(vector_store.get_dims());
+                    Metadata_entry mdata_arr[h.max_kv];
                     for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
                     {
-                        if (!file_manager.read_vector(i, id_buf, embd_buf.data()))
-                            continue;                              // skip deleted (flag=0) or bad records
-                        vector_store.make_entry(id_buf, embd_buf); // this increments count itself
+                        if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
+                            continue;                                         // skip deleted (flag=0) or bad records
+                        vector_store.make_entry(id_buf, embd_buf, mdata_arr); // this increments count itself
                     }
                 }
                 results.message = "LOAD <Successful>\n";
