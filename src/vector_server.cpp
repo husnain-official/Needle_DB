@@ -13,7 +13,7 @@ bool Vector_Server::setup()
     addrinfo hints, *results, *node;
     int status = 0;
     memset(&hints, 0, sizeof(hints)); // Ensure 'hints' is empty
-    hints.ai_family = AF_INET;        // AF_UNSPEC;      // Accept either 'IPv4' or 'IPv6'
+    hints.ai_family = AF_UNSPEC;      // AF_UNSPEC;      // Accept either 'IPv4' or 'IPv6'
     hints.ai_socktype = SOCK_STREAM;  // Sock-Stream will be used -> 2 way connection needed
     hints.ai_flags = AI_PASSIVE;      // Fill up my Ip address, (I am the server)
     // Safety-Check
@@ -181,7 +181,7 @@ void Vector_Server::handle_client(int client_fd)
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS F1 F2 ... Fn
+            else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS key1=abc key2=def key3=xyz F1 F2 ... Fn
             {
                 Vector query_v;
                 size_t top_k = 0;
@@ -197,12 +197,21 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
+                //
+                std::vector<size_t> matching_index;
+                results = vector_store.get_matching_indices(query_v.metadata, matching_index);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                //
                 std::vector<std::size_t> index;
                 index.reserve(top_k);
                 std::vector<std::string> id;
                 std::vector<float> similarities;
                 similarities.reserve(top_k); // push_back now fills from position 0
-                vector_store.return_k_most_similar(query_v, top_k, index, similarities);
+                vector_store.return_k_most_similar(query_v, top_k, index, similarities, &matching_index);
                 // now return the id's of top_k similar vectors
                 results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
                 send(client_fd, results.message.data(), results.message.length(), 0);

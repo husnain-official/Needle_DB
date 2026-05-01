@@ -1,4 +1,5 @@
 #include "command_parser.h"
+#include "vector_store.h" // this needs the initial conditions of the system, to parse correctly.
 //------------Helpers----------------
 void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
 {
@@ -146,12 +147,17 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command)
 {
     try
     {
-        std::size_t index = 0,
-                    next_space_index = 0, to_move = 0;
+        // Setup
+        std::size_t index = 0, next_space_index = 0, to_move = 0;
         v.id = "";
         const size_t MAX_TOP_K = 30;
-        // const size_t MAX_TOP_K_DIGITS = 2;
         int top_k_raw = 0;
+        // Zero-initialise all metadata slots upfront
+        for (size_t m = 0; m < meta_data_kp_pairs_set; m++)
+        {
+            v.metadata[m].key[0] = '\0';
+            v.metadata[m].value[0] = '\0';
+        }
         // Check-01: verify command starts with "QUERY "
         next_space_index = command.find(' ', 0);
         if (next_space_index != 5 or next_space_index == std::string::npos)
@@ -192,6 +198,63 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command)
         if (v.dims != dimensions_set)
         {
             return {false, "ERROR <Invalid dimensions entered\n>"};
+        }
+
+        size_t meta_count = 0;
+        while (meta_count < meta_data_kp_pairs_set && next_space_index != std::string::npos)
+        {
+            // Peek at the next token without committing index yet
+            std::size_t peek_start = next_space_index + 1;
+            std::size_t peek_end = command.find(' ', peek_start);
+            std::size_t peek_len = (peek_end == std::string::npos) ? command.size() - peek_start : peek_end - peek_start;
+
+            if (peek_len == 0)
+                break;
+            std::string token = command.substr(peek_start, peek_len);
+
+            // No '=' means this token is a float — leave index/next_space_index; where they are so the embedding loop picks up correctly
+            if (token.find('=') == std::string::npos)
+                break;
+
+            // Commit: advance past this token
+            index = peek_start;
+            next_space_index = peek_end;
+            to_move = peek_len;
+
+            // Validate: exactly one '='
+            size_t eq_pos = token.find('=');
+            if (token.find('=', eq_pos + 1) != std::string::npos)
+            {
+                return {false, "ERROR <Metadata token '" + token + "' has multiple '='>\n"};
+            }
+
+            std::string key = token.substr(0, eq_pos);
+            std::string val = token.substr(eq_pos + 1);
+
+            if (key.empty())
+            {
+                return {false, "ERROR <Metadata key is empty>\n"};
+            }
+            if (key.size() > meta_data_length_set)
+            {
+                return {false, "ERROR <Metadata key '" + key + "' exceeds 32 chars>\n"};
+            }
+            if (val.empty())
+            {
+                return {false, "ERROR <Metadata value for key '" + key + "' is empty>\n"};
+            }
+            if (val.size() > meta_data_length_set)
+            {
+                return {false, "ERROR <Metadata value for key '" + key + "' exceeds 32 chars>\n"};
+            }
+
+            std::strncpy(v.metadata[meta_count].key, key.c_str(), meta_data_length_set);
+            std::strncpy(v.metadata[meta_count].value, val.c_str(), meta_data_length_set);
+            // this is handeled by, write vector(DISK) and make entry(RAM)
+            // v.metadata[meta_count].key[meta_data_length_set] = '\0';
+            // v.metadata[meta_count].value[meta_data_length_set] = '\0';
+
+            meta_count++;
         }
         // Embeddings loop
         v.data.resize(dimensions_set);

@@ -42,6 +42,68 @@ Parse_result Vector_store::get_index_in_ram(const std::string &id)
     }
     return {false, "ERROR<Id not found in Memory>\n"};
 }
+Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr, std::vector<size_t> &matching_indices)
+{
+    try
+    {
+        matching_indices.clear();
+
+        // Count how many query pairs are actually set (non-empty key)
+        size_t query_pair_count = 0;
+        for (size_t m = 0; m < meta_data_kp_pairs_set; m++)
+        {
+            if (mdata_arr[m].key[0] != '\0')
+                query_pair_count++;
+        }
+
+        // No metadata in query — every index is a candidate
+        if (query_pair_count == 0)
+        {
+            matching_indices.resize(count_);
+            std::iota(matching_indices.begin(), matching_indices.end(), 0);
+            return {true, ""};
+        }
+
+        for (size_t i = 0; i < count_; i++)
+        {
+            const std::string &id = get_id(i);
+
+            // Vector has no metadata stored — cannot satisfy any query pair
+            auto vec_meta_it = metadata_.find(id);
+            if (vec_meta_it == metadata_.end())
+                continue;
+
+            const std::map<std::string, std::string> &vec_pairs = vec_meta_it->second;
+
+            // Every non-empty query pair must exist with a matching value
+            bool all_match = true;
+            for (size_t m = 0; m < meta_data_kp_pairs_set; m++)
+            {
+                if (mdata_arr[m].key[0] == '\0')
+                    continue; // unused slot, skip
+
+                std::string qkey(mdata_arr[m].key);
+                std::string qval(mdata_arr[m].value);
+
+                auto pair_it = vec_pairs.find(qkey);
+                if (pair_it == vec_pairs.end() || pair_it->second != qval)
+                {
+                    all_match = false;
+                    break;
+                }
+            }
+
+            if (all_match)
+                matching_indices.push_back(i);
+        }
+
+        return {true, ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {false, std::string("ERROR <get_matching_indices failed: ") + e.what() + ">\n"};
+    }
+}
 // setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
@@ -161,7 +223,7 @@ std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(cons
         results.resize(top_n); // only keep 'n' pairs
     return results;
 }
-void Vector_store ::return_k_most_similar(const Vector &query_v, size_t &top_k, std::vector<std::size_t> &return_index, std::vector<float> &similarities)
+void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, std::vector<std::size_t> &return_index, std::vector<float> &similarities, std::vector<size_t> *selected_indexes)
 {
     // add a check to make sure that the database has been loaded, i.e all vectors are now in the ram
     size_t stored_vectors = count_;
@@ -169,12 +231,23 @@ void Vector_store ::return_k_most_similar(const Vector &query_v, size_t &top_k, 
     results.reserve(stored_vectors);
     float similarity;
     // calculate all similarities
-    for (size_t i = 0; i < stored_vectors; i++)
+    if (selected_indexes != nullptr && !selected_indexes->empty())
     {
-        similarity = dot_similarity(query_v.data, get_embedding(i));
-        results.push_back({similarity, i});
+        for (size_t i : *selected_indexes)
+        {
+            similarity = dot_similarity(query_v.data, get_embedding(i));
+            results.push_back({similarity, i});
+        }
     }
-    top_k = std::min(top_k, count_);
+    else
+    {
+        for (size_t i = 0; i < stored_vectors; i++)
+        {
+            similarity = dot_similarity(query_v.data, get_embedding(i));
+            results.push_back({similarity, i});
+        }
+    }
+    top_k = std::min(top_k, results.size());
     // Partially sort so only the top 'top_k' elements are sorted at the front
     std::partial_sort(
         results.begin(),

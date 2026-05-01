@@ -13,7 +13,8 @@
 #include "types.h"   // for convinient structs
 //--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
 constexpr size_t dimensions_no_of_digits = 4;
-constexpr size_t dimensions_set = 1024;
+constexpr size_t dimensions_set = 1536;
+// constexpr size_t dimensions_set = 1024;
 constexpr size_t id_length_set = 32;
 constexpr size_t meta_data_length_set = 32;
 constexpr size_t meta_data_kp_pairs_set = 3;
@@ -36,6 +37,7 @@ public:
     const std::size_t get_count() const;
     Parse_result get_metadata_entry() const;
     Parse_result get_index_in_ram(const std::string &);
+    Parse_result get_matching_indices(const Metadata_entry *, std::vector<size_t> &);
 
     // Setters
     Parse_result set_dims_(const std::size_t);
@@ -49,7 +51,7 @@ public:
     bool read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k);
     //  Search-functions
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);
-    void return_k_most_similar(const Vector &, size_t &, std::vector<std::size_t> &, std::vector<float> &);
+    void return_k_most_similar(const Vector &, size_t &, std::vector<std::size_t> &, std::vector<float> &, std::vector<size_t> *selected_indexes = nullptr);
 };
 #endif
 /*

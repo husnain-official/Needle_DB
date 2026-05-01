@@ -23,16 +23,5 @@ int main()
         //----------------------------Program End-------------------------------
     }
 
-    //
-    // cout << "It works\n";
-    // cout << "Id: " << id << endl;
-    // cout << "Top_k: " << top_k << endl;
-    // cout << "Dims: " << v.dims << endl;
-    // cout << std::fixed << std::setprecision(5);
-    // for (int i = 0; i < dimensions; i++)
-    // {
-    //     cout << "Data[" << i << "] is: " << v.data[i] << "      ";
-    // }
-
     return 0;
 }
