@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 #
 include_directories(src)
 include_directories(include)   
-include_directories(tests/integration)  
 #   
 add_executable(main src/main.cpp src/vector_store.cpp src/file_manager.cpp src/vector_server.cpp src/command_parser.cpp)
 

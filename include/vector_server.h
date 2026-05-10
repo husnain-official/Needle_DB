@@ -1,5 +1,6 @@
 #ifndef VECTOR_SERVER
 #define VECTOR_SERVER
+// necessary libraries for server creation.
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netdb.h>
@@ -11,28 +12,26 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
-//
+// necessary libraries for rest of logic.
 #include <string>
 #include <cstring>
 #include <iostream>
-#include "vector_store.h"
-#include "file_manager.h"
-#include "similarities.hpp"
-#include "command_parser.h"
-#include "types.h"
+#include "vector_store.h"   // for RAM updates/access
+#include "file_manager.h"   // for file/database updates/access
+#include "similarities.hpp" // for similarity searches
+#include "command_parser.h" // for parsing logic
+#include "types.h"          // for all structs used though out other files
 //
 #define BACKLOG (10) // max no of client waiting in queue
 class Vector_Server
 {
 public:
-    //
     Vector_Server(std::string port, Vector_store &, File_manager &);
     ~Vector_Server();
-    // handels core-functionality
+    // --- Core-Functionality
     bool setup();
     void run();
     void stop();
-    //
 
 private:
     int server_fd;
@@ -43,6 +42,7 @@ private:
     File_manager &file_manager;
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
+// use a guide to fully understand this prebuilt code.
 // struct sockaddr
 // {
 //     unsigned short sa_family; // address family, AF_xxx
@@ -61,10 +61,3 @@ private:
 // };
 
 #endif
-/*
-        The Reverse-Proxy Problem:
-            Document this thoroughly and also provide commands to enable the solution in readme.md
-        The Format:
-            In final documentation and readme, state this very cleanly
-
-*/

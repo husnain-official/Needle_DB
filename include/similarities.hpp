@@ -1,7 +1,7 @@
 #ifndef SIMILARITIES
 #define SIMILARITIES
 // real reson for hpp, too lazy for individual .h and .cpp files
-//--Similarity functions
+// --- Similarity functions
 inline float cosine_similarity(const std::vector<float> &vec_a, const std::vector<float> &vec_b)
 {
     long double mag_a = 0;
@@ -40,13 +40,7 @@ inline float cosine_similarity(const std::vector<float> &vec_a, const float *vec
 }
 inline float dot_similarity(const std::vector<float> &vec_a, const std::vector<float> &vec_b)
 {
-
     return std::inner_product(vec_a.begin(), vec_a.end(), vec_b.begin(), 0.0f);
-    // long double dot_product = 0;             // use the optimised function
-    // for (std::size_t i = 0; i < vec_a.size(); i++)
-    //     dot_product += (vec_a[i] * vec_b[i]);
-    // float similarity = dot_product;
-    // return similarity;
 }
 inline float dot_similarity(const std::vector<float> &vec_a, const float *vec_b)
 {

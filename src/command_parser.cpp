@@ -1,6 +1,5 @@
 #include "command_parser.h"
-#include "vector_store.h" // this needs the initial conditions of the system, to parse correctly.
-//------------Helpers----------------
+// --- Helpers
 void next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)
 {
     next_space_index = command.find(' ', index);
@@ -11,7 +10,7 @@ void next_equal_changes(const std::string &command, const std::size_t &index, st
     next_space_index = command.find('=', index);
     to_move = next_space_index - index;
 }
-//----------------------------Functionality For 'Vector_Server'----------------------------------
+//---------------------------- Parsing For 'Vector_Server' ----------------------------------
 Parse_result insert_parsing(Vector &v, const std::string &command)
 {
     try

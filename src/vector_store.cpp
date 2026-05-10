@@ -1,8 +1,7 @@
 #include "vector_store.h"
-#include "similarities.hpp"
 //--- math and similarity functions ---
 bool Vector_store::normalise_vector(std::vector<float> &vec)
-{ // called before each query/save into the database, makes dot-product math easier(magnitude of each vector is 1)
+{
     double long vec_mag = 0;
     for (size_t i = 0; i < vec.size(); i++)
         vec_mag += (vec[i] * vec[i]);
@@ -12,12 +11,11 @@ bool Vector_store::normalise_vector(std::vector<float> &vec)
     // divide each element with magnitude.
     for (size_t i = 0; i < vec.size(); i++)
         vec[i] = vec[i] / vec_mag;
-    // Now, dot_similarity and cosine_similarity will give same restuls
-    // we have removed the 'magnitude' of overlap and only 'direction' exists now
+    // we have removed the 'magnitude' of overlap and only 'direction' exists now. Cosine and Dot product same results now.
     return true;
 }
 //--- Vector_store implementation
-// getters
+// 1. getters
 const float *Vector_store::get_embedding(size_t i) const
 {
     return (embeddings_.data() + (i * dims_));
@@ -28,11 +26,6 @@ const std::string &Vector_store::get_id(size_t i) const
 }
 const std::size_t Vector_store::get_dims() const { return dims_; }
 const std::size_t Vector_store::get_count() const { return count_; }
-// Parse_result Vector_store::get_metadata_entry(std::string id) const  // getter later first setters
-// {
-//     Metadata_entry m[3];
-//     m[0].key = metadata_.find(id);
-// }
 Parse_result Vector_store::get_index_in_ram(const std::string &id)
 {
     for (size_t i = 0; i < count_; i++)
@@ -104,7 +97,7 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
         return {false, std::string("ERROR <get_matching_indices failed: ") + e.what() + ">\n"};
     }
 }
-// setters
+// 2. setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
     if (dim != dimensions_set)
@@ -121,12 +114,6 @@ Parse_result Vector_store::set_count_(const int count)
 }
 void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::string &id)
 {
-    /*
-    for refrence, make sure when setting they are fully set to '\0' and then the values are copied in them
-    for writing, make it such that only non '\0' values remain(Responsibility of write_vector and insert_parsing)
-    potential bugs: 1) set char[31] = '\0'. if size =>32   2) first insert key, if success then this
-    */
-    // if no metadata provided{nullptr}, none to save, return
     if (!mdata_arr)
         return;
     //  setup the inner map
@@ -205,7 +192,7 @@ bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::v
     return true;
 }
 
-//  search
+//  3. search
 std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(const std::vector<float> &query, const int top_n)
 {
     std::vector<std::pair<std::string, float>> results; // will contains id's and similarities
@@ -263,5 +250,4 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
         return_index.push_back(results[i].index);
         similarities.push_back(results[i].similarity);
     }
-    //
 }

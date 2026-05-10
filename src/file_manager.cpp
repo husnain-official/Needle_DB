@@ -1,5 +1,5 @@
 #include "file_manager.h"
-// constructor
+// --- Constructor
 File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs)
 {
     // Purpose: Boot-up the litteral 'file-manager'
@@ -45,7 +45,7 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     }
     std::cout << "Data-Base path opened successfully\n";
 }
-//  Header-Related-Functions
+// --- Header-Related-Functions
 Header File_manager::read_header()
 {
     Header h;
@@ -63,16 +63,14 @@ bool File_manager::flush_header()
     file_.flush();
     return file_.good();
 }
-//  Helper-Functions/Getters
+// --- Getters
 uint64_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
 uint64_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
 uint64_t File_manager::get_record_size() const { return record_size_; }
 uint64_t File_manager::get_record_offset(uint64_t index) const { return (sizeof(Header) + index * record_size_); }
-void File_manager::compact()
-{
-}
-//  Core-Operations
-bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr) // .data() must be passed
+void File_manager::compact() {}
+// --- Core-Operations
+bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr)
 {
     file_.clear();
     // 1.   move the write cursor to the eof
@@ -138,7 +136,7 @@ bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_
     file_.read(id.data(), header_.id_length);
     id_out.resize(header_.id_length, '\0');
     id_out.assign(id.data(), header_.id_length);
-    size_t first_null = id_out.find('\0'); //      trim the extra entries of
+    size_t first_null = id_out.find('\0'); // trim the extra entries off
     if (first_null != std::string::npos)
         id_out.resize(first_null);
     //  3.  Read the meta-data

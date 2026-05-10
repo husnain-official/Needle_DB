@@ -1,12 +1,10 @@
 #include "vector_server.h"
-// Open 'Beejs guide to Network Programming', to understand this easily
+// Open 'Beejs guide to Network Programming', to understand this easily.
 // https://beej.us/guide/bgnet/html/split/system-calls-or-bust.html#getaddrinfoprepare-to-launch
-//  The setup
-Vector_Server::Vector_Server(std::string port, Vector_store &V_store, File_manager &F_manager) : port_num(port), server_fd(-1), vector_store(V_store), file_manager(F_manager)
+//  --- Setup
+Vector_Server::Vector_Server(std::string port, Vector_store &V_store, File_manager &F_manager) : port_num(port), server_fd(-1), vector_store(V_store), file_manager(F_manager) {}
 // set server_fd to -1, as a socket has not been assigned yet
-{
-}
-Vector_Server::~Vector_Server() { stop(); } //
+Vector_Server::~Vector_Server() { stop(); }
 bool Vector_Server::setup()
 {
     // setup (necessary info for socket creation)
@@ -53,7 +51,7 @@ bool Vector_Server::setup()
     freeaddrinfo(results);
     return true;
 }
-//  The working
+//  --- Working
 void Vector_Server::stop()
 {
     if (server_fd != -1)
@@ -61,7 +59,7 @@ void Vector_Server::stop()
 }
 void Vector_Server::run()
 {
-    // AUTO-LOAD on startup
+    // AUTO-LOAD on startup, Read the data from the database and load into RAM
     Header h = file_manager.read_header();
     if (h.total_vector_count > 0)
     {
@@ -316,4 +314,3 @@ void Vector_Server::handle_client(int client_fd)
     close(client_fd); // Close the connection after sending
     std::cout << "Client disconnected." << std::endl;
 }
-//

@@ -10,6 +10,7 @@
 #include <algorithm>  // for std::find
 #include <iterator>   // for std::distance
 #include "types.h"    // for convinient structs
+
 #pragma pack(push, 1) // No hidden padding!, keep the bytes explicit
 struct Header
 {
@@ -43,7 +44,7 @@ public:
     void compact(); // rewrite without tombstoned records
     uint64_t get_live_vector_count() const;
     uint64_t get_total_vector_count() const;
-    uint64_t get_record_size() const; // dims*4 + id_len + 1
+    uint64_t get_record_size() const;
 
 private:
     std::fstream file_;
@@ -53,16 +54,3 @@ private:
 };
 
 #endif
-/*
-    Header:
-        Size is intentionally kept a factor of 8, there was some reason for optimization, search it up later and properly document in
-        in the final readme or better in the documentation file
-
-        Only plain old data (POD) allowed in header
-
-        Endianness (Platform Independence)
-
-        in read vector it is the callers responsibility to properly manage the C-string, as it may not have a null terminator
-
-
-*/
