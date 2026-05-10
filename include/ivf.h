@@ -13,7 +13,7 @@
 class Vector_index
 {
 public:
-    virtual void build_(const Vector_store &store) = 0;
+    virtual void build_( Vector_store &store) = 0;
     virtual std::vector<size_t> search_(const Vector &query, size_t top_k) = 0;
     virtual void add_(std::size_t index) = 0;
     virtual void delete_(std::size_t index) = 0;
@@ -46,14 +46,14 @@ public:
     // Overloaded to accept raw pointers for high-performance tight loops
     float euclidean_distance(const float *v1, const float *v2, size_t dims) const;
     float euclidean_distance(const std::vector<float> &v1, const std::vector<float> &v2) const;
-    void build_(const Vector_store &store) override;
+    void build_( Vector_store &store) override;
     std::vector<size_t> search_(const Vector &query, size_t top_k) override;
+    void add_(std::size_t index) override;
     void delete_(std::size_t index) override;
 
 private:
     // Helper to find the closest centroid to a given vector
     size_t find_nearest_centroid(const float *vec, size_t dims) const;
-    
 };
 
 #endif

@@ -21,6 +21,7 @@
 #include "similarities.hpp" // for similarity searches
 #include "command_parser.h" // for parsing logic
 #include "types.h"          // for all structs used though out other files
+#include "ivf.h"            // for IVF
 //
 #define BACKLOG (10) // max no of client waiting in queue
 class Vector_Server
@@ -40,6 +41,7 @@ private:
     // Vector_server is dependent upon both, vector_store and file_manager
     Vector_store &vector_store;
     File_manager &file_manager;
+    IVF_index ivf_index_{100, 5};
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
 // use a guide to fully understand this prebuilt code.

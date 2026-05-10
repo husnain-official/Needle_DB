@@ -12,6 +12,7 @@
 #include <cstdint>          // for uint64_t
 #include "types.h"          // for convinient structs
 #include "similarities.hpp" // for similarity functions
+// #include "ivf.h"            // for ivf data
 
 //--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
 constexpr size_t dimensions_no_of_digits = 4;
@@ -19,6 +20,9 @@ constexpr size_t dimensions_set = 1536;
 constexpr size_t id_length_set = 32;
 constexpr size_t meta_data_length_set = 32;
 constexpr size_t meta_data_kp_pairs_set = 3;
+
+// --Index-Creation
+class Vector_index;
 
 // --Vector-store class
 class Vector_store
@@ -28,6 +32,7 @@ class Vector_store
     std::map<std::string, std::map<std::string, std::string>> metadata_;
     std::size_t dims_;
     std::size_t count_;
+    Vector_index *index_ = nullptr;
 
 public:
     // Constructor/Destructor
@@ -41,7 +46,7 @@ public:
     Parse_result get_metadata_entry() const;
     Parse_result get_index_in_ram(const std::string &);
     Parse_result get_matching_indices(const Metadata_entry *, std::vector<size_t> &);
-
+    Vector_index *get_index() const ;
     // Setters
     Parse_result set_dims_(const std::size_t);
     Parse_result set_count_(const int);
@@ -49,6 +54,7 @@ public:
     void clear();
     void make_entry(const std::string, std::vector<float>, const Metadata_entry *);
     bool remove_entry(const std::string &);
+    void attach_index(Vector_index *);
 
     // Core-Functions
     bool normalise_vector(std::vector<float> &);

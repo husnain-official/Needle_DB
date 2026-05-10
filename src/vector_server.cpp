@@ -89,6 +89,9 @@ void Vector_Server::run()
     {
         std::cout << "No data in database found, starting fresh.\n";
     }
+    // Now we first crete out IVF centroids
+    vector_store.attach_index(&ivf_index_);
+    ivf_index_.build_(vector_store);
     // Now we allow our port to listen
     if ((listen(server_fd, BACKLOG)) == -1)
     {
@@ -174,6 +177,9 @@ void Vector_Server::handle_client(int client_fd)
                     continue;
                 }
                 vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.
+                // Notify IVF of the new entry (count_ just incremented, so index = count-1)
+                // if (vector_store.get_count() > 0)
+                //     ivf_index_.add_(vector_store.get_count() - 1);
                 results.message = "INSERT <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
@@ -203,13 +209,29 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                //
+                // 0. setup necessary variables
                 std::vector<std::size_t> index;
                 index.reserve(top_k);
                 std::vector<std::string> id;
                 std::vector<float> similarities;
                 similarities.reserve(top_k); // push_back now fills from position 0
-                vector_store.return_k_most_similar(query_v, top_k, index, similarities, &matching_index);
+                // 1. Use ivf, if failed fallback to brute force
+                std::vector<size_t> ivf_candidates = ivf_index_.search_(query_v, top_k);
+                if (!ivf_candidates.empty())
+                {
+                    // Intersect ivf_candidates with matching_index (metadata filter)
+                    std::vector<size_t> filtered;
+                    for (size_t c : ivf_candidates)
+                    {
+                        if (matching_index.empty() ||
+                            std::find(matching_index.begin(), matching_index.end(), c) != matching_index.end())
+                            filtered.push_back(c);
+                    }
+                    // Use filtered as the candidate pool — pass as matching_index override
+                    vector_store.return_k_most_similar(query_v, top_k, index, similarities, filtered.empty() ? &matching_index : &filtered);
+                }
+                else
+                    vector_store.return_k_most_similar(query_v, top_k, index, similarities, &matching_index);
                 // now return the id's of top_k similar vectors
                 results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
                 send(client_fd, results.message.data(), results.message.length(), 0);
@@ -246,12 +268,17 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
+                // Get RAM index before removing (needed for IVF)
+                Parse_result idx_res = vector_store.get_index_in_ram(id);
+                size_t ram_idx = idx_res.success ? std::stoul(idx_res.message) : SIZE_MAX;
                 if (!vector_store.remove_entry(id))
                 {
                     results.message = "ERROR <Could not delete vector(Memory)\n>";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
+                if (ram_idx != SIZE_MAX)
+                    ivf_index_.delete_(ram_idx);
                 results.message = "DELETE <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
@@ -300,6 +327,7 @@ void Vector_Server::handle_client(int client_fd)
                             continue;                                         // skip deleted (flag=0) or bad records
                         vector_store.make_entry(id_buf, embd_buf, mdata_arr); // this increments count itself
                     }
+                    ivf_index_.build_(vector_store);
                 }
                 results.message = "LOAD <Successful>\n";
                 results.message = "OK\n";

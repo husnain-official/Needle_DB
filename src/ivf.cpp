@@ -17,22 +17,23 @@ float IVF_index::euclidean_distance(const std::vector<float> &v1, const std::vec
     return euclidean_distance(v1.data(), v2.data(), v1.size());
 }
 
-void IVF_index::build_(const Vector_store &store)
+void IVF_index::build_(Vector_store &store)
 {
     store_ref = &store;
     size_t num_vectors = store.get_count();
     size_t dims = store.get_dims();
+
+    // Always initialize lists, even if empty
+    lists.clear();
+    lists.resize(centroid_count);
+    centroids.clear();
+    centroids.resize(centroid_count * dims, 0.0f);
 
     if (num_vectors == 0)
         return;
 
     // Cap centroid count to the total number of vectors if dataset is very small
     centroid_count = std::min(centroid_count, num_vectors);
-
-    centroids.clear();
-    centroids.resize(centroid_count * dims, 0.0f);
-    lists.clear();
-    lists.resize(centroid_count);
 
     // --- Step 1: Initialize centroids randomly from existing data ---
     std::vector<size_t> indices(num_vectors);
@@ -140,14 +141,13 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 
 void IVF_index::add_(std::size_t index)
 {
-    if (!store_ref || lists.empty())
+    if (!store_ref || centroids.empty() || lists.empty())
         return;
 
-    const float *vec = store_ref->get_embedding(index);
     size_t dims = store_ref->get_dims();
-    size_t best_centroid = find_nearest_centroid(vec, dims);
-
-    lists[best_centroid].push_back(index);
+    const float *vec = store_ref->get_embedding(index);
+    size_t nearest = find_nearest_centroid(vec, dims);
+    lists[nearest].push_back(index);
 }
 
 void IVF_index::delete_(std::size_t index)

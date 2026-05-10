@@ -1,4 +1,5 @@
 #include "vector_store.h"
+#include "ivf.h"
 //--- math and similarity functions ---
 bool Vector_store::normalise_vector(std::vector<float> &vec)
 {
@@ -97,6 +98,7 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
         return {false, std::string("ERROR <get_matching_indices failed: ") + e.what() + ">\n"};
     }
 }
+Vector_index *Vector_store::get_index() const { return index_; }
 // 2. setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
@@ -151,6 +153,8 @@ void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_
     embeddings_.insert(embeddings_.end(), embd_buf.begin(), embd_buf.end());
     set_metadata(mdata_arr, id_buf);
     count_++;
+    if (index_)
+        index_->add_(count_ - 1);
 }
 bool Vector_store::remove_entry(const std::string &id)
 {
@@ -160,11 +164,18 @@ bool Vector_store::remove_entry(const std::string &id)
 
     size_t target = std::stoi(p.message);
     size_t last = count_ - 1;
+    // 1. Remove both entries from IVF
+    if (index_)
+    {
+        index_->delete_(target);
+        if (target != last)
+            index_->delete_(last);
+    }
 
-    // 1. Swap ids
+    // 2.1. Swap data
     std::swap(ids_[target], ids_[last]);
 
-    // 2. Swap embedding blocks in the flat array
+    // 2.2. Swap embedding blocks in the flat array
     float *target_block = embeddings_.data() + (target * dims_);
     float *last_block = embeddings_.data() + (last * dims_);
     std::swap_ranges(target_block, target_block + dims_, last_block);
@@ -176,6 +187,9 @@ bool Vector_store::remove_entry(const std::string &id)
     // 4. Delete metadata
     metadata_.erase(id);
     count_--;
+
+    if (index_ && target != last)
+        index_->add_(target);
     return true;
 }
 bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::vector<std::size_t> &index, std::size_t &top_k)
@@ -191,7 +205,7 @@ bool Vector_store::read_all_ids(std::vector<std::string> &read_ids, const std::v
     }
     return true;
 }
-
+void Vector_store::attach_index(Vector_index *idx) { index_ = idx; }
 //  3. search
 std::vector<std::pair<std::string, float>> Vector_store::brute_force_search(const std::vector<float> &query, const int top_n)
 {
