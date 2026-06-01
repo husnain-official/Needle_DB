@@ -1,0 +1,69 @@
+ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING
+
+What is Artificial Intelligence?
+
+Artificial intelligence, commonly known as AI, refers to the simulation of human intelligence processes by computer systems. These processes include learning, reasoning, problem-solving, perception, and language understanding. AI systems are designed to perform tasks that would normally require human intelligence, such as recognizing speech, making decisions, and translating languages.
+
+AI can be categorized into two types: narrow AI and general AI. Narrow AI, also called weak AI, is designed to perform a specific task, such as facial recognition or internet searches. General AI, also called strong AI, would have the ability to perform any intellectual task that a human can do. Currently, all existing AI systems are narrow AI. General AI remains theoretical and has not yet been achieved.
+
+What is Machine Learning?
+
+Machine learning is a subset of artificial intelligence that provides systems the ability to automatically learn and improve from experience without being explicitly programmed. Machine learning focuses on the development of computer programs that can access data and use it to learn for themselves.
+
+The process begins with observations or data, such as examples, direct experience, or instruction. The goal is to allow computers to learn automatically without human intervention and adjust actions accordingly. Machine learning algorithms include supervised learning, unsupervised learning, and reinforcement learning.
+
+Supervised learning involves training a model on labeled data, meaning the correct answers are provided during training. The model learns to map inputs to outputs based on these examples. Common supervised learning algorithms include linear regression, logistic regression, decision trees, and support vector machines.
+
+Unsupervised learning involves training a model on unlabeled data. The model tries to find patterns and relationships in the data on its own. Common unsupervised learning algorithms include clustering algorithms such as k-means, and dimensionality reduction techniques such as principal component analysis.
+
+Reinforcement learning involves training an agent to make decisions by rewarding it for correct actions and penalizing it for incorrect ones. The agent learns by interacting with its environment. Reinforcement learning has been used to train AI systems to play games, control robots, and optimize resource management.
+
+What is Deep Learning?
+
+Deep learning is a subset of machine learning that uses artificial neural networks with many layers, called deep neural networks, to model complex patterns in data. Deep learning has driven many recent advances in AI, including image recognition, natural language processing, and speech recognition.
+
+A neural network is inspired by the structure of the human brain. It consists of layers of nodes, called neurons, that are connected to each other. Each neuron receives input, applies a mathematical transformation, and passes its output to the next layer. The network learns by adjusting the weights of these connections during training.
+
+Convolutional neural networks, known as CNNs, are commonly used for image recognition tasks. They use a special type of layer called a convolutional layer that can detect local patterns in images, such as edges and textures. CNNs have achieved human-level performance on many image recognition benchmarks.
+
+Recurrent neural networks, known as RNNs, are designed for sequential data such as text and time series. They maintain a hidden state that captures information from previous inputs. Long short-term memory networks, called LSTMs, are a type of RNN that can learn long-range dependencies in data.
+
+The Transformer Architecture
+
+The transformer architecture was introduced in 2017 in the paper Attention Is All You Need by researchers at Google. It revolutionized natural language processing by replacing recurrent layers with an attention mechanism that allows the model to consider all parts of the input simultaneously.
+
+The key innovation of the transformer is the self-attention mechanism, which allows the model to weigh the importance of different words in a sentence when processing each word. This enables the model to capture long-range dependencies in text more effectively than RNNs.
+
+Transformers are the foundation of large language models such as GPT, BERT, and Claude. These models are trained on massive amounts of text data and can perform a wide variety of natural language tasks, including text generation, question answering, summarization, and translation.
+
+What are Embeddings?
+
+Embeddings are numerical representations of data, such as text or images, in the form of dense vectors of floating-point numbers. Embeddings capture the semantic meaning of data, so items with similar meanings have similar vector representations.
+
+Word embeddings, such as Word2Vec and GloVe, represent individual words as vectors. Sentence embeddings, such as those produced by models like OpenAI text-embedding-3-small, represent entire sentences or paragraphs as vectors. These embeddings can be used for tasks such as semantic search, text classification, and clustering.
+
+Embeddings are typically high-dimensional, often with hundreds or thousands of dimensions. The distance between two embedding vectors, often measured using cosine similarity, indicates how semantically similar the corresponding pieces of text are. A cosine similarity of 1.0 means the vectors are identical, while 0.0 means they are completely unrelated.
+
+What is Natural Language Processing?
+
+Natural language processing, known as NLP, is a branch of artificial intelligence that focuses on the interaction between computers and human language. NLP involves teaching machines to read, understand, and generate human language in a way that is both meaningful and useful.
+
+NLP tasks include tokenization, which is the process of splitting text into individual words or subwords. It also includes part-of-speech tagging, named entity recognition, sentiment analysis, machine translation, text summarization, and question answering.
+
+Large language models have dramatically improved the state of the art in NLP. Models like GPT-4 and Claude can generate coherent and contextually appropriate text, answer complex questions, write code, and even engage in creative writing.
+
+What is a Vector Database?
+
+A vector database is a type of database that stores and retrieves data based on vector similarity rather than exact keyword matching. Instead of storing traditional rows and columns, a vector database stores embedding vectors and provides fast search over them using algorithms like cosine similarity or approximate nearest neighbour search.
+
+Vector databases are a key component of modern AI systems, particularly for retrieval-augmented generation. They allow AI applications to quickly find the most relevant pieces of information from a large knowledge base by comparing the embedding of a query with the embeddings of stored documents.
+
+Popular vector databases include Pinecone, Weaviate, Milvus, and Chroma. These databases support features such as metadata filtering, which allows users to combine vector search with traditional keyword filters.
+
+What is Retrieval Augmented Generation?
+
+Retrieval-augmented generation, commonly known as RAG, is a technique that combines information retrieval with text generation to produce more accurate and grounded answers from large language models. Instead of relying solely on the knowledge encoded in the model parameters, RAG retrieves relevant documents from an external knowledge base and uses them as context when generating a response.
+
+The RAG pipeline consists of two main components. The first is the retrieval component, which embeds the user query, searches a vector database for the most similar document chunks, and returns the top results. The second is the generation component, which takes the retrieved documents as context and uses a language model to generate an answer that is grounded in that context.
+
+RAG helps reduce hallucinations in language models by providing them with factual context. It also allows AI systems to answer questions about proprietary or recent information that the model was not trained on, without requiring expensive model retraining or fine-tuning.

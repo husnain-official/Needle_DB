@@ -16,13 +16,13 @@ struct Header
 {
     char magic_number[4];        // {'V','D','B','\0'}, required file-format
     uint8_t version;             //  version of database
-    uint32_t dimensions;         //  dims of each vector = 1536/1024
+    uint32_t dimensions;         //  dims of each vector = 1536/1024/768
     uint8_t id_length;           //  fixed bytes of "id_name"
     uint8_t kv_length;           //  fixed bytes of 'keys' and 'values' for metadata
     uint8_t max_kv;              //  fixed number of key value pairs per record
     uint64_t live_vector_count;  //  records
     uint64_t total_vector_count; //  includes entries with flag '0' / deleted vectors
-    uint8_t padding[4];          //  future-proof
+    uint8_t padding[5];          //  future-proof
 };
 #pragma pack(pop)
 class File_manager

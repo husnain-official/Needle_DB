@@ -8,7 +8,21 @@ obj/
 #   documentation to ignore
 *.pdf
 *.docx
+*.png
 
 #   OS generated files
 .DS_Store
 Thumbs.db
+
+#   virtual-env
+.venv/
+
+#   
+.env
+
+#    Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+#   Others

@@ -12,7 +12,7 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     memset(header_.padding, 0, sizeof(header_.padding));
     header_.total_vector_count = 0;
     header_.live_vector_count = 0;
-    header_.version = 3;
+    header_.version = 4;
     // Initilize other elements
     record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (header_.kv_length * (header_.max_kv * 2));
     // record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (sizeof(Metadata_entry)); thiss will make it not work
@@ -35,9 +35,9 @@ File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_le
     {
         throw std::runtime_error("Invalid file format: Magic number mismatch.");
     }
-    if (header_.version != 3)
+    if (header_.version != 4)
     {
-        throw std::runtime_error("Schema mismatch: Incompatible database version. Expected Version 3.");
+        throw std::runtime_error("Schema mismatch: Incompatible database version. Expected Version 4.");
     }
     if (header_.dimensions != dims or header_.id_length != id_len or header_.kv_length != kv_len or header_.max_kv != kv_max_pairs)
     {

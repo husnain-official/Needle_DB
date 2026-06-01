@@ -1,0 +1,38 @@
+-------pipeline/embedder.py-------
+Requirements: 
+    1. 'ollama' installed
+    2. Use 'ollama' to pull 'nomic-embed-text'
+    3. Have 'dotenv' installed to use .env files
+        for this you have to create a virtual env,
+            python3 -m venv .venv       # Create the virtual env
+            source .venv/bin/activate   # activate the venv
+            pip install dotenv          # Install the package
+            deactivate                  # To exit the venv
+
+-------pipeline/ingestor.py-------
+Requirements:
+    1. pip install pypdf
+    2. pip install python-docx
+
+-------app_gui.py-------
+Requirements:
+    1. pip install streamlit
+
+
+
+
+
+
+-----problems--------
+server stores same thing over and over
+the servers stores but the client does, not it will show score but it needs to have the documnet uploaded once again to show the text
+
+
+
+
+
+
+==============================================Chnage later=========================
+New-NetFirewallRule -DisplayName "Ollama WSL Allow" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow
+
+

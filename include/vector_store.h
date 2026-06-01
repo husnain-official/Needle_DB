@@ -15,8 +15,8 @@
 // #include "ivf.h"            // for ivf data
 
 //--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
-constexpr size_t dimensions_no_of_digits = 4;
-constexpr size_t dimensions_set = 1536;
+constexpr size_t dimensions_no_of_digits = 3;
+constexpr size_t dimensions_set = 768;
 constexpr size_t id_length_set = 32;
 constexpr size_t meta_data_length_set = 32;
 constexpr size_t meta_data_kp_pairs_set = 3;
