@@ -40,7 +40,7 @@ class RAGChatbot:
         bot.disconnect()
     """
 
-    def __init__(self, host, port, top_k=5, min_score=0.7):
+    def __init__(self, host, port, top_k=5, min_score=0.55):
         """
         Args:
             host:      server IP

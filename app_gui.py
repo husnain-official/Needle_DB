@@ -118,7 +118,7 @@ with st.sidebar:
         if st.button("Connect", use_container_width=True, type="primary"):
             try:
                 RAGChatbot = get_bot_class()
-                bot = RAGChatbot(host=ip, port=int(port), top_k=5, min_score=0.7)
+                bot = RAGChatbot(host=ip, port=int(port), top_k=5, min_score=0.55)
                 bot.connect()
                 st.session_state.bot       = bot
                 st.session_state.connected = True
@@ -291,8 +291,10 @@ with tab_search:
                         with c2:
                             st.markdown(f"Score: **{score:.4f}**")
 
-                        st.progress(min(float(score), 1.0),
-                                    text=f"Similarity: {score:.1%}")
+                        safe_score = max(0.0, min(float(score), 1.0))
+                        st.progress(safe_score, text=f"Similarity: {score:.1%}")
+                        # st.progress(min(float(score), 1.0),text=f"Similarity: {score:.1%}")
+
                         if preview:
                             st.caption(preview)
                         else:

@@ -76,6 +76,7 @@ bool File_manager::write_vector(const std::string &id, const float *embeddings, 
     // 1.   move the write cursor to the eof
     // file_.seekp(get_record_offset(header_.total_vector_count));
     file_.seekp(0, std::ios::end);
+    // file_.seekp(get_record_offset(header_.total_vector_count));
     // 2.   intilize the flag
     char active_flag = 1;
     file_.write(&active_flag, 1);

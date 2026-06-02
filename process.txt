@@ -19,20 +19,39 @@ Requirements:
     1. pip install streamlit
 
 
-
+=============Edits===================
+1. Reduced padding of header
+2. Added a single line in src/file_manager.cpp in 'write_vector'
+3. Added lines to app_gui.py line 296
+4. 
 
 
 
 -----problems--------
-server stores same thing over and over
-the servers stores but the client does, not it will show score but it needs to have the documnet uploaded once again to show the text
+1. server stores same thing over and over
+2. the servers stores but the client does, not it will show score but it needs to have the documnet uploaded once again to show the text
+3. the UI shows results below the .7 limit streamlit
+4. In UI, if docs are added not through the side bar, it creates a copy of the file, sets random names and then stores them, Problem: Random names of files in UI
+5. I have to change dims and other things in include/vector_store.cpp extract them from .env MAKE THIS CHANGE
 
 
-
-
-
+----architechture problems-----
+1. How does a client join externally ? 
+2. I would have to make the server go online somehow ? 
+3. Note: The server is online on a local network, 
+4. Problem: TO connect we expect the client to have some level of code, like the client.py at the very least 
+5. What is the solution ? 
+6. Make the server go online is the best solution
+7. What does that even mean ? 
+8. Make it just a online website anyone can visit
+9. That would require what, what changes ? 
+10. The UI is run locally , even if the server can listen , the UI is absent , how will the client intract ?
 
 ==============================================Chnage later=========================
 New-NetFirewallRule -DisplayName "Ollama WSL Allow" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow
+
+ip route | grep default
+
+
 
 

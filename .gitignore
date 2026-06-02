@@ -26,3 +26,5 @@ __pycache__/
 *$py.class
 
 #   Others
+hello.py 
+test_embed.py

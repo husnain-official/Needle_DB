@@ -14,15 +14,19 @@
 #pragma pack(push, 1) // No hidden padding!, keep the bytes explicit
 struct Header
 {
-    char magic_number[4];        // {'V','D','B','\0'}, required file-format
-    uint8_t version;             //  version of database
-    uint32_t dimensions;         //  dims of each vector = 1536/1024/768
-    uint8_t id_length;           //  fixed bytes of "id_name"
-    uint8_t kv_length;           //  fixed bytes of 'keys' and 'values' for metadata
-    uint8_t max_kv;              //  fixed number of key value pairs per record
+    // 8-byte types
     uint64_t live_vector_count;  //  records
     uint64_t total_vector_count; //  includes entries with flag '0' / deleted vectors
-    uint8_t padding[5];          //  future-proof
+    // 4-byte types
+    uint32_t dimensions;  //  dims of each vector = 1536/1024/768
+    char magic_number[4]; // {'V','D','B','\0'}, required file-format
+    // 1-byte types
+    uint8_t version;   //  version of database
+    uint8_t id_length; //  fixed bytes of "id_name"
+    uint8_t kv_length; //  fixed bytes of 'keys' and 'values' for metadata
+    uint8_t max_kv;    //  fixed number of key value pairs per record
+    // Pad to exactly 32 bytes (32 - 28 = 4 bytes)
+    uint8_t padding[4]; //  future-proof
 };
 #pragma pack(pop)
 class File_manager
