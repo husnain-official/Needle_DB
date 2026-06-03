@@ -33,6 +33,7 @@ Requirements:
 3. the UI shows results below the .7 limit streamlit
 4. In UI, if docs are added not through the side bar, it creates a copy of the file, sets random names and then stores them, Problem: Random names of files in UI
 5. I have to change dims and other things in include/vector_store.cpp extract them from .env MAKE THIS CHANGE
+6. Imp Problem: in server side of code i set the dependencies as constexpr in one of the .h file, now i have no way to change them without going through ALL the code 
 
 
 ----architechture problems-----
@@ -55,3 +56,31 @@ ip route | grep default
 
 
 
+Project Root/
+├── app/
+│   └── rag_chatbot.py          # Orchestrates retrieval context and local LLM chat loop
+├── client/
+│   └── vecdb_client.py         # Handles low-level TCP serialization and network protocol constraints
+├── data/
+│   ├── chunk_store.json        # Local JSON cache mapping vector IDs to raw text chunks
+│   └── database.vdb            # Persistent binary file containing raw vector records and headers
+├── pipeline/
+│   ├── embedder.py             # Integrates Ollama backend for mxbai-embed-large (1024-d) execution
+│   ├── ingestor.py             # Document parser and sliding-window text-chunking engine
+│   └── searcher.py             # Independent search utility for direct database querying
+├── include/
+    ├── command_parser.h
+    ├── file_manager.h
+    ├── ivf.h
+    ├── similarities.hpp            # Inlined math execution routines for L2 distance and dot products
+    ├── types.h                     # Data primitives including Vector, Metadata_entry, and Query_result
+    ├── vector_server.h
+    └── vector_store.h
+├── src/  
+    ├── command_parser.cpp          # Request validation and token parsing logic
+    ├── file_manager.cpp            # Low-level disk I/O handling the 32-byte aligned database header
+    ├── ivf.cpp                     # K-Means clustering algorithm and centroid list management
+    ├── main.cpp                    # System entry point instantiating the database layers and server socket
+    ├── vector_server.cpp           # Direct socket handling loop (binds to port 8080)
+    └── vector_store.cpp            # RAM-allocated flat array structures handling runtime query sorting
+└── app_gui.py                  # Streamlit orchestration script launching the presentation layer dashboard

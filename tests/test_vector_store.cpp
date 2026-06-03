@@ -4,7 +4,9 @@
 #include <string>
 #include <cstring>
 #include "vector_store.h"
+#include "env_config.hpp"
 using namespace std;
+Config env;
 // Helper to spin up a quick 1536-dim vector for testing
 vector<float> make_vec(float base_val)
 {
@@ -18,7 +20,7 @@ vector<float> make_vec(float base_val)
 // Test:1
 void test_normalization()
 {
-    Vector_store store;
+    Vector_store store(env);
 
     // Edge case 1: Zero vector
     vector<float> zero_vec(1536, 0.0f);
@@ -33,7 +35,7 @@ void test_normalization()
 // Test:2
 void test_insert_and_delete()
 {
-    Vector_store store;
+    Vector_store store(env);
     Metadata_entry empty_md[3] = {};
 
     store.make_entry("vec1", make_vec(1.0f), empty_md);
@@ -57,7 +59,7 @@ void test_insert_and_delete()
 // Test:3
 void test_metadata()
 {
-    Vector_store store;
+    Vector_store store(env);
 
     Metadata_entry md_red[3] = {};
     strncpy(md_red[0].key, "color", 32);
@@ -87,6 +89,13 @@ void test_metadata()
 
 int main()
 {
+    // -----------------------Configure with .env---------------------------
+    bool success = loadServerConfig(".env", env);
+    if (!success)
+    {
+        cout << "Error: Server could not read .env file properly\n";
+        return -1;
+    }
     cout << "Running Vector_store tests...\n";
 
     test_normalization();

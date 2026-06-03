@@ -27,7 +27,7 @@
 class Vector_Server
 {
 public:
-    Vector_Server(std::string port, Vector_store &, File_manager &);
+    Vector_Server(std::string port, Vector_store &, File_manager &, const Config);
     ~Vector_Server();
     // --- Core-Functionality
     bool setup();
@@ -36,6 +36,7 @@ public:
 
 private:
     int server_fd;
+    const Config con;
     std::string port_num;
     void handle_client(int client_fd);
     // Vector_server is dependent upon both, vector_store and file_manager

@@ -1,0 +1,31 @@
+dimensions_no_of_digits     ->  1x in command_parser.cpp
+dimensions_set              ->  8x in command_parser.cpp
+                                1x in |vector_store.cpp| ,main.cpp
+id_length_set               ->  1x in command_parser.cpp, main.cpp
+meta_data_length_set        ->  1x in main.cpp
+                                6x in command_parser.cpp
+                                2x in |vector_store.cpp|
+meta_data_kp_pairs_set      ->  1x in main.cpp
+                                2x in command_parser.cpp
+                                3x in |vector_store.cpp|
+
+
+Note:
+Currently:
+    1. file_manager takes the dependencies as individual parameters in the constructor. Path, Dims, ID_length, kv_lenght, kv_max_pairs
+    2. vector_server the meeting point of all classes takes parameters. 
+        refrences of file_manager, vector_store
+        port 
+    3. vector_store takes no parameters. Uses constexpers the pre-defined conditions
+
+Change:
+    1. In main the new file containing the new struct 'config' and function to fill that struct from .env file will be called
+        one 'config' struct will exist only throughout and will be passed as constant everywhere. 
+    2. No change to file_manager and vector_server 
+    3. vector_store will take a 'config' struct as const parameter
+    4. command_parser.cpp which relies the most on theses constexpers
+        in insert_parsing(), query_parsing(), delete_parsing(), save_parsing() will all be given a new argument a const 'config' struct.
+    
+    5. Had to change vector_server consturctor parameter to pass a Config as well as, it calls the parser functions, which all 
+        needs the Config instance to work
+    

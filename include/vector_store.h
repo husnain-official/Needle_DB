@@ -12,14 +12,8 @@
 #include <cstdint>          // for uint64_t
 #include "types.h"          // for convinient structs
 #include "similarities.hpp" // for similarity functions
+#include "env_config.hpp"
 // #include "ivf.h"            // for ivf data
-
-//--Constants   *POINT WHERE PROJECT INITIAL-CONDITIONS ARE SET*
-constexpr size_t dimensions_no_of_digits = 4;
-constexpr size_t dimensions_set = 1024;
-constexpr size_t id_length_set = 32;
-constexpr size_t meta_data_length_set = 32;
-constexpr size_t meta_data_kp_pairs_set = 3;
 
 // --Index-Creation
 class Vector_index;
@@ -33,10 +27,12 @@ class Vector_store
     std::size_t dims_;
     std::size_t count_;
     Vector_index *index_ = nullptr;
+    // THe pre-set configrations from .env
+    const Config conditions;
 
 public:
     // Constructor/Destructor
-    Vector_store() : dims_(dimensions_set), count_(0) {}
+    Vector_store(const Config con) : conditions(con), dims_(con.dims), count_(0) {}
     ~Vector_store() {}
     // Getters
     const float *get_embedding(size_t i) const;

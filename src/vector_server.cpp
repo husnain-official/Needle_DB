@@ -2,7 +2,7 @@
 // Open 'Beejs guide to Network Programming', to understand this easily.
 // https://beej.us/guide/bgnet/html/split/system-calls-or-bust.html#getaddrinfoprepare-to-launch
 //  --- Setup
-Vector_Server::Vector_Server(std::string port, Vector_store &V_store, File_manager &F_manager) : port_num(port), server_fd(-1), vector_store(V_store), file_manager(F_manager) {}
+Vector_Server::Vector_Server(std::string port, Vector_store &V_store, File_manager &F_manager, const Config conditions) : port_num(port), server_fd(-1), vector_store(V_store), file_manager(F_manager), con(conditions) {}
 // set server_fd to -1, as a socket has not been assigned yet
 Vector_Server::~Vector_Server() { stop(); }
 bool Vector_Server::setup()
@@ -157,7 +157,7 @@ void Vector_Server::handle_client(int client_fd)
             if ((command.rfind("INSERT", 0)) == 0) // INSERT ID DIMS key1=abc key2=def key3=xyz F1 F2 F3 ... Fn
             {
                 Vector v;
-                Parse_result results = insert_parsing(v, command);
+                Parse_result results = insert_parsing(v, command, con);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -189,7 +189,7 @@ void Vector_Server::handle_client(int client_fd)
             {
                 Vector query_v;
                 size_t top_k = 0;
-                Parse_result results = query_parsing(query_v, top_k, command);
+                Parse_result results = query_parsing(query_v, top_k, command, con);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -248,7 +248,7 @@ void Vector_Server::handle_client(int client_fd)
             {
                 std::string id = "";
                 Parse_result results;
-                results = delete_parsing(id, command);
+                results = delete_parsing(id, command, con);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -286,7 +286,7 @@ void Vector_Server::handle_client(int client_fd)
             else if ((command.rfind("SAVE", 0)) == 0) // SAVE
             {
                 Parse_result results;
-                results = save_parsing(command, 0);
+                results = save_parsing(command, 0, con);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -301,7 +301,7 @@ void Vector_Server::handle_client(int client_fd)
             else if ((command.rfind("LOAD", 0)) == 0) // LOAD
             {
                 Parse_result results;
-                results = save_parsing(command, 1);
+                results = save_parsing(command, 1, con);
                 if (!results.success) // save and load -> 4 chars same logic
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
