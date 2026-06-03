@@ -265,3 +265,15 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
         similarities.push_back(results[i].similarity);
     }
 }
+bool Vector_store::id_exists(std::string &id_to_check)
+{
+    std::size_t id_in_ram = this->ids_.size();
+    if (id_in_ram == 0)
+        return false;
+    for (size_t i = 0; i < id_in_ram; i++)
+    {
+        if (id_to_check == ids_[i])
+            return true;
+    }
+    return false;
+}

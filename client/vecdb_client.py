@@ -127,7 +127,7 @@ class Client:
             buffer += chunk
             decoded = buffer.decode()
             # Both terminal conditions the server can send
-            if "OK\n" in decoded or "END\n" in decoded or "ERROR" in decoded:
+            if "OK\n" in decoded or "END\n" in decoded or "ERROR" in decoded or "WARNING" in decoded:
                 break
         return decoded.strip()
 

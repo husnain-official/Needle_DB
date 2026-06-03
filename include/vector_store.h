@@ -55,6 +55,7 @@ public:
     // Core-Functions
     bool normalise_vector(std::vector<float> &);
     bool read_all_ids(std::vector<std::string> &, const std::vector<std::size_t> &, std::size_t &);
+    bool id_exists(std::string &);
 
     //  Search-functions
     std::vector<std::pair<std::string, float>> brute_force_search(const std::vector<float> &, const int);

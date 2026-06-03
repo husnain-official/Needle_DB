@@ -23,9 +23,8 @@ load_dotenv()
 # Keeps last N exchanges to avoid exceeding GPT context window.
 # 1 turn = 1 user message + 1 assistant message = 2 entries.
 MAX_HISTORY_TURNS = 6
-STORE_FILE = "data/chunk_store.json"
-# LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL")
-LOCAL_LLM_MODEL = "qwen2.5:3b"
+STORE_FILE = os.getenv("STORE_FILE")
+LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL")
 
 
 class RAGChatbot:
@@ -96,14 +95,7 @@ class RAGChatbot:
         """Save DB state, persist local chunk mapping, and close connection."""
         self.client.save()
         
-        # FIXED: Serialize chunk store to disk before exiting
-        try:
-            os.makedirs(os.path.dirname(STORE_FILE), exist_ok=True)
-            with open(STORE_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.chunk_store, f, ensure_ascii=False, indent=2)
-            print("[RAGChatbot] Safely synchronized local chunk store to disk.")
-        except Exception as e:
-            print(f"[RAGChatbot] ERROR saving chunk store to disk: {e}")
+        self._save_chunk_store()
 
         self.client.disconnect()
         print("RAGChatbot disconnected.")
@@ -178,6 +170,9 @@ class RAGChatbot:
                 total_chunks += 1
 
         print(f"\nKnowledge base ready — {total_chunks} chunk(s) loaded into DB.")
+        # NEW: Save immediately after loading the folder
+        if total_chunks > 0:
+            self._save_chunk_store()
 
     # ─────────────────────────────────────────────────────────────────
     # INTERNAL HELPERS
@@ -259,6 +254,18 @@ class RAGChatbot:
         except Exception as e:
             return f"ERROR calling local Ollama daemon: {e}"
 
+    def _save_chunk_store(self):
+        """Helper to safely serialize the local chunk store to disk."""
+        try:
+            if STORE_FILE:
+                # Ensure the directory exists before saving
+                os.makedirs(os.path.dirname(STORE_FILE), exist_ok=True)
+                with open(STORE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(self.chunk_store, f, ensure_ascii=False, indent=2)
+                print("[RAGChatbot] Safely synchronized local chunk store to disk.")
+        except Exception as e:
+            print(f"[RAGChatbot] ERROR saving chunk store to disk: {e}")
+
     # ─────────────────────────────────────────────────────────────────
     # PUBLIC API
     # ─────────────────────────────────────────────────────────────────
@@ -327,7 +334,7 @@ class RAGChatbot:
         print("─────────────────────────────────────────────────────")
 
     # ── ADDITION 3: single-file ingestion shortcut ────────────────────
-    def add_document(self, filepath, chunk_size=150):
+    def add_document(self, filepath, chunk_size=150, display_name=None):
         """
         Adds a single file to the knowledge base without scanning a folder.
         Useful for adding one document after the KB is already loaded.
@@ -335,7 +342,7 @@ class RAGChatbot:
         Example:
             bot.add_document("data/new_paper.pdf")
         """
-        filename    = os.path.basename(filepath)
+        filename    = display_name or os.path.basename(filepath)
         source_name = os.path.splitext(filename)[0][:32]
 
         try:
@@ -362,3 +369,5 @@ class RAGChatbot:
             self.chunk_store[doc_id] = chunk
 
         print(f"Done. {len(chunks)} chunk(s) added.")
+        if chunks:
+            self._save_chunk_store()

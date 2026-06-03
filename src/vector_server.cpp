@@ -163,7 +163,12 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                //
+                if (vector_store.id_exists(v.id))
+                {
+                    results.message = "WARNING <Id already exists in database>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
                 if (!vector_store.normalise_vector(v.data))
                 {
                     results.message = "ERROR <Vector Normalization Failed>\n";

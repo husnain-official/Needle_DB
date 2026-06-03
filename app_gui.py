@@ -356,7 +356,7 @@ with tab_kb:
 
                 with st.spinner(f"Chunking, embedding, and inserting '{uploaded.name}'..."):
                     try:
-                        st.session_state.bot.add_document(tmp_path, chunk_size=150)
+                        st.session_state.bot.add_document(tmp_path, chunk_size=150, display_name=uploaded.name)
                         st.success(f"'{uploaded.name}' ingested successfully!")
                     except Exception as e:
                         st.error(f"Ingestion error: {e}")
