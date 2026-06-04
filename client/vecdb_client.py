@@ -1,6 +1,6 @@
 # =============================================================================
 # client/vecdb_client.py
-# TCP client for Person A's C++ vector database server.
+# TCP client for C++ vector database server.
 #
 # Protocol:
 #   INSERT id dims [key=val ...] f1 f2 ... fn\n  → OK\n
@@ -41,7 +41,7 @@ class Client:
 
     def connect(self, host: str, port: int):
         """
-        Opens TCP connection to Person A's server.
+        Opens TCP connection to server.
         Raises ConnectionRefusedError if server is not running.
         Raises OSError / TimeoutError for network problems.
         """
@@ -118,7 +118,7 @@ class Client:
             except socket.timeout:
                 raise TimeoutError(
                     "Server did not respond within 15 seconds. "
-                    "Check that Person A's server is still running."
+                    "Check that server is still running."
                 )
             if not chunk:
                 raise ConnectionError(

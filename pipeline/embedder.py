@@ -1,7 +1,7 @@
 # =============================================================================
 # pipeline/embedder.py
-# Converts plain text into a 768-dimensional float vector using the
-# nomic-embed-text through ollama
+# Converts plain text into a 768/1536/1024-dimensional float vector using the
+# nomic-embed-text/mxbai-embed-large through ollama
 #
 # Every piece of text that enters the vector database passes through here —
 # both at ingestion time and at query time.
@@ -9,7 +9,7 @@
 #
 # Requires: ollama, nomic-embed-model, dotenv
 # Install:  irm https://ollama.com/install.ps1 | iex 
-#           ollama pull nomic-embed-text
+#           ollama pull mxbai-embed-large
 #           pip install python-dotenv
 # =============================================================================
 

@@ -1,4 +1,4 @@
-#   folders to ignore
+#   Folders to ignore
 .vscode/
 build/
 include/nlohmann/
@@ -17,7 +17,7 @@ Thumbs.db
 #   virtual-env
 .venv/
 
-#   
+#   Enviornment
 .env
 
 #   Databases
@@ -29,6 +29,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+#   Compressed Files
+*.zip
+
 #   Others
 hello.py 
 test_embed.py
+swark-output/

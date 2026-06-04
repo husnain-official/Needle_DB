@@ -103,7 +103,7 @@ def chunk_text(text: str, chunk_size: int = 150) -> list[str]:
     Splits plain text into overlapping word-count chunks.
 
     150 words per chunk is the project default — chosen because:
-      - It fits comfortably in the GPT prompt as context
+      - It fits comfortably in the GPT/LLM prompt as context
       - It keeps each embedding semantically focused
       - It keeps metadata values (chunk_id) short (single or double digit)
 

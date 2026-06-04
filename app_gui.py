@@ -12,8 +12,8 @@ import streamlit as st
 
 # ── page config must be first streamlit call ─────────────────────────
 st.set_page_config(
-    page_title="VectorDB RAG Chatbot",
-    page_icon="🧠",
+    page_title="Needle_DB RAG Chatbot",
+    page_icon="🪡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -94,8 +94,8 @@ def kb_summary():
 # SIDEBAR
 # ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("🧠 VectorDB RAG")
-    st.caption("Person B · Week 6 Dashboard")
+    st.title("🪡 Needle_DB RAG")
+    st.caption("Dashboard")
     st.divider()
 
     # ── connection status ──
@@ -182,7 +182,7 @@ with tab_chat:
     st.header("Chat with your documents")
 
     if not st.session_state.connected:
-        st.info("Connect to Person A's server using the sidebar to get started.")
+        st.info("Connect to server using the sidebar to get started.")
     elif chunk_count() == 0:
         st.warning("No chunks loaded. Click 'Load KB from folder' in the sidebar.")
     else:
@@ -244,7 +244,7 @@ with tab_chat:
 # ════════════════════════════════════════════════════════════════════
 with tab_search:
     st.header("Search Explorer")
-    st.caption("Search the vector DB directly and inspect raw similarity scores.")
+    st.caption("Search the Needle_DB directly and inspect raw similarity scores.")
 
     if not st.session_state.connected:
         st.info("Connect to the server first.")
@@ -339,7 +339,7 @@ with tab_kb:
         uploaded = st.file_uploader(
             "Upload a .txt, .pdf, or .docx file",
             type=["txt", "pdf", "docx"],
-            help="File will be chunked, embedded, and inserted into the vector DB."
+            help="File will be chunked, embedded, and inserted into the Needle_DB."
         )
 
         if uploaded:

@@ -1,3 +1,14 @@
+// convert this all into a proper readme page 
+// documnet all the commands needed to make this code run and work as intended
+// it includes 2 window defender bypasses, 1 ip search etc 
+requirements.txt:
+openai>=1.0.0
+python-dotenv>=1.0.0
+pypdf>=3.0.0
+python-docx>=1.0.0
+streamlit>=1.32.0
+Create a setup.txt or setup.md 
+
 -------pipeline/embedder.py-------
 Requirements: 
     1. 'ollama' installed

@@ -6,6 +6,10 @@
 #include <unordered_map>
 
 // ----- Config-Stuct -------------------------
+/**
+ * @brief Defines system-wide operational constraints populated during startup.
+ * @note Instances are passed by constant reference throughout the application lifecycle.
+ */
 struct Config
 {
     std::string port = "8080";
@@ -32,6 +36,14 @@ inline std::string trimEnv(const std::string &str)
  * Returns true if the file was opened successfully, false otherwise.
  */
 // ----- To_call ------------------------------
+/**
+ * @brief Parses an environment file to populate global operational constraints.
+ * @param envFilePath File system path targeting the plain text configuration file
+ * @param con Configuration structure modified with successfully extracted values
+ * @return True upon successful extraction and conversion, false otherwise
+ * @warning Catches string-to-integer conversion exceptions internally and returns false silently
+ * @note Unmapped keys present in the file are safely ignored without raising errors
+ */
 inline bool loadServerConfig(const std::string &envFilePath, Config &con)
 {
     std::ifstream file(envFilePath);

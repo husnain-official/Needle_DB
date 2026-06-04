@@ -6,7 +6,7 @@
 #   2. client.query(vector, k=5)        → top-5 (doc_id, score) from DataBase
 #   3. filter by min_score              → drop irrelevant chunks
 #   4. look up chunk text locally       → build context string
-#   5. call Local LLM model             → grounded answer from context only  ; Note: Removed.
+#   5. call Local LLM model             → grounded answer from context only
 
 import os
 import time
@@ -47,7 +47,6 @@ class RAGChatbot:
             top_k:     number of chunks to retrieve per query
             min_score: minimum cosine similarity to accept a chunk as context.
                        Chunks below this are silently dropped.
-                       0.3 = lenient, 0.5 = strict grounding.
         """
         self.host      = host
         self.port      = port
@@ -107,7 +106,7 @@ class RAGChatbot:
     def load_knowledge_base(self, folder_path, chunk_size=150):
         """
         Reads all supported files (.txt, .pdf, .docx) in folder_path,
-        chunks each file, embeds every chunk, inserts into Person A's DB,
+        chunks each file, embeds every chunk, inserts into DB,
         and stores chunk text locally for prompt building.
 
         Safe to call more than once — additional docs are added each time.
@@ -180,7 +179,7 @@ class RAGChatbot:
 
     def _retrieve(self, question, filters=None):
         """
-        Embeds question, queries Person A's DB, applies min_score filter,
+        Embeds question, queries DB, applies min_score filter,
         looks up chunk text locally.
 
         Returns list of (doc_id, score, chunk_text).

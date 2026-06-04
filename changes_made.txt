@@ -1,33 +1,3 @@
-//////////////////////////////////////////////////      two           ////////////////////////////////////////////////////////////
-Problem: 
-    The embeddings are saved in the data base but the text is not saved anywhere, so after a restart we only 
-    get the similarity and the id_s of the similar chunks but not the text itself
-
-Solution:
-    The Chunks are stored in a josn file, right beside the .vdb file, the code was already there but 
-    befoer the .josn only got saved when we 'disconnected' but now it does as sson as it injests something
-    so, 
-Changes:    
-    updated the app/rag_chatbot.py a bit .
-
-//////////////////////////////////////////////////      one           ////////////////////////////////////////////////////////////
-Probelem:
-    1. The server just accepts whatever is given to it, it does not check if 'identicle' id is already present 
-        in the database or not.
-    2. This causes repetation of entries in the database, same thing is entered multiple times. 
-
-Solution:
-    1. Data is only stored in the 'INSERT' command, so what i should do is make a new function in 'Vector_store'
-        class, named 'id_exists()' which returns a 'parse_results'
-    2. This way i dont have to change any existing code
-    3. One new function in vector_store class
-        one new block of conditional in the 'insert' command section of the 'handel_client' section of 'vector_server'.
-
-    4. If it does not exist beforehand, the result.success is false meaning, no copy found and flow of function continues
-        normally 
-    5. If it does exist, result.success will be true, and i will 'continue' the function there after sending an error
-        to the client, like "WARNING <Id already exists in database>\n"
-
-Changes Made:
-1. Added id_exists(), 2. Added a 5 line block in src/vector_server in handel_client function in 'INSERT' case block.
-2. In client/vecdb_client.py add a line 130, to accept "WARNING" as well form server
+1.  Doxy added in include/
+2.  Removed the wording and instances of old project structures
+3.  Created a .env.example

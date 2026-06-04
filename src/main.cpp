@@ -2,11 +2,10 @@
 #include "file_manager.h"
 #include "vector_server.h"
 #include "env_config.hpp"
-
 using namespace std;
 int main()
 {
-    cout << "VectorDB   starting...\n";
+    cout << "Needle_DB(Server) starting...\n";
 
     // -----------------------Configure with .env---------------------------
     Config env;
