@@ -30,23 +30,6 @@ Requirements:
     1. pip install streamlit
 
 
-=============Edits===================
-1. Reduced padding of header
-2. Added a single line in src/file_manager.cpp in 'write_vector'
-3. Added lines to app_gui.py line 296
-4. 
-
-
-
------problems--------
-1. server stores same thing over and over
-2. the servers stores but the client does, not it will show score but it needs to have the documnet uploaded once again to show the text
-3. the UI shows results below the .7 limit streamlit
-4. In UI, if docs are added not through the side bar, it creates a copy of the file, sets random names and then stores them, Problem: Random names of files in UI
-5. I have to change dims and other things in include/vector_store.cpp extract them from .env MAKE THIS CHANGE
-6. Imp Problem: in server side of code i set the dependencies as constexpr in one of the .h file, now i have no way to change them without going through ALL the code 
-
-
 ----architechture problems-----
 1. How does a client join externally ? 
 2. I would have to make the server go online somehow ? 
@@ -61,7 +44,6 @@ Requirements:
 
 ==============================================Chnage later=========================
 New-NetFirewallRule -DisplayName "Ollama WSL Allow" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow
-
 ip route | grep default
 
 
@@ -73,6 +55,7 @@ Project Root/
 ├── client/
 │   └── vecdb_client.py         # Handles low-level TCP serialization and network protocol constraints
 ├── data/
+│   ├── documnets/              # Directory form where files are ingested into the rag_chatbot
 │   ├── chunk_store.json        # Local JSON cache mapping vector IDs to raw text chunks
 │   └── database.vdb            # Persistent binary file containing raw vector records and headers
 ├── pipeline/
@@ -94,4 +77,11 @@ Project Root/
     ├── main.cpp                    # System entry point instantiating the database layers and server socket
     ├── vector_server.cpp           # Direct socket handling loop (binds to port 8080)
     └── vector_store.cpp            # RAM-allocated flat array structures handling runtime query sorting
-└── app_gui.py                  # Streamlit orchestration script launching the presentation layer dashboard
+├── tests/                      # Tests for individual files
+├── app_gui.py                  # Streamlit orchestration script launching the presentation layer dashboard
+├── .env.example                # Pre-Set values and paths
+├── Cmakelists.txt              # Cmake configration file
+├── Readme.md                       
+├── Dockerfile.cpp              # Docker image config file for C++ server
+├── Dockerfile.python           # Docker image config file for python side
+└── docker-compose.yml          # Docker compose file 

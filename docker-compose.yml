@@ -1,0 +1,46 @@
+services:
+
+  cpp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpp
+    ports:
+      - "8080:8080"
+    volumes:
+      - db_data:/app/data
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+    networks:
+      - needledb_net
+
+  python_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    ports:
+      - "8501:8501"
+    volumes:
+      - db_data:/app/data
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+    depends_on:
+      - cpp_server
+      - ollama
+    networks:
+      - needledb_net
+
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - needledb_net
+
+volumes:
+  db_data:
+  ollama_data:
+
+networks:
+  needledb_net:

@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    streamlit \
+    python-dotenv \
+    pypdf \
+    python-docx \
+    ollama
+
+COPY app/ ./app/
+COPY client/ ./client/
+COPY pipeline/ ./pipeline/
+COPY app_gui.py .
+
+RUN mkdir -p data/documents
+
+CMD ["streamlit", "run", "app_gui.py", "--server.address=0.0.0.0"]

@@ -1,3 +1,0 @@
-1.  Doxy added in include/
-2.  Removed the wording and instances of old project structures
-3.  Created a .env.example

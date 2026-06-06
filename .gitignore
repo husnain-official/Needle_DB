@@ -21,6 +21,7 @@ Thumbs.db
 .env
 
 #   Databases
+./data/documents/
 *.vdb
 *.json
 
