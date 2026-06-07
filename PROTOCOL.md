@@ -4,7 +4,7 @@
 Communication uses a plain-text line protocol over TCP.
 - Every **command** ends with `\n`
 - Every **response** ends with `\n`
-- Server processes one command at a time (single-threaded in Weeks 1–4)
+- Server processes one command at a time 
 
 ---
 
@@ -28,7 +28,7 @@ INSERT <id> <dims> [key=val ...] f1 f2 f3 ... fn\n
 
 **Example:**
 ```
-INSERT kb_ai_ml_chunk_0 1536 source=kb_ai_ml chunk_id=0 0.123 0.456 ...\n
+INSERT kb_ai_ml_chunk_0 1024 source=kb_ai_ml chunk_id=0 0.123 0.456 ...\n
 ```
 
 ---
@@ -60,7 +60,7 @@ END\n
 
 **Example:**
 ```
-QUERY 3 1536 source=kb_ai_ml 0.123 0.456 ...\n
+QUERY 3 1024 source=kb_ai_ml 0.123 0.456 ...\n
 ```
 
 ---
@@ -108,4 +108,4 @@ SAVE\n
 | Metadata key length | max 32 characters |
 | Metadata value length | max 32 characters |
 | Metadata key/value | no spaces allowed |
-| Vector dimensions | 1536 (OpenAI text-embedding-3-small) |
+| Vector dimensions | 1024 (qwen2.5 :3b)
