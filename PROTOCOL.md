@@ -108,4 +108,4 @@ SAVE\n
 | Metadata key length | max 32 characters |
 | Metadata value length | max 32 characters |
 | Metadata key/value | no spaces allowed |
-| Vector dimensions | 1024 (qwen2.5 :3b)
+| Vector dimensions | 1024 (mxbai-embed-large) |

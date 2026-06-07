@@ -8,7 +8,7 @@ NeedleDB is a custom C++ vector database engine and companion Python Retrieval-A
 ![Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-**Links:** [Documentation](https://needle-db.web.app) | [Docker Hub](https://hub.docker.com/r/draft-namespace/needledb)
+**Links:** [Documentation](https://needle-db.web.app) | [Demo](https://youtu.be/kfnTPKDshtE) | [Docker Hub](https://hub.docker.com/u/husnain80)
 ## What Is NeedleDB?
 
 NeedleDB provides the underlying infrastructure required for semantic search and Retrieval-Augmented Generation (RAG) pipelines. It ingests unstructured text, stores high-dimensional vector embeddings, and executes mathematical similarity computations to retrieve contextually relevant data. This architecture enables local Large Language Models to answer queries grounded in custom knowledge bases rather than relying solely on pre-trained neural network weights.
@@ -24,6 +24,7 @@ The NeedleDB architecture separates performance-bound memory operations from app
 <div align="center">
   <img src="./assets/Architecture.png" alt="NeedleDB Architecture Diagram" width="600" />
 </div>
+
 ### Component Matrix
 
 | Component | Language | Responsibility |
@@ -47,7 +48,7 @@ The C++ engine currently operates a single-threaded `accept()` loop, processing 
 
 ### Supported Commands
 
-The protocol exposes four primary operations. For the complete specification, including metadata constraints and error handling, refer to the [Full Protocol Specification](Protocol.md).
+The protocol exposes four primary operations. For the complete specification, including metadata constraints and error handling, refer to the [Full Protocol Specification](./PROTOCOL.md).
 
 * **INSERT**: Persists a new 1024-dimensional vector record and up to three metadata pairs to the database.
     * **Request:** `INSERT <id> 1024 [key=value ...] f1 f2 ... f1024\n`
@@ -104,7 +105,7 @@ The retrieval pipeline translates a user prompt into a semantic search, surfacin
 Execute the following commands to initialize the environment and start the containers:
 
 ```bash
-git clone <repo>
+git clone <https://github.com/husnain-official/Needle_DB>
 cd NeedleDB
 cp .env.example .env
 docker compose up
@@ -178,6 +179,21 @@ Project Root/
 ├── Dockerfile.python           # Docker image configuration for the Python layer
 └── docker-compose.yml          # Docker Compose configuration for multi-container deployment
 ```
+## Screenshots
+**Screenshot of Semantic Search:**
+<div align="center">
+  <img src="./assets/Screenshot_semetic_search.png" alt="NeedleDB Semantic Search" width="1000" />
+</div>  
+
+**Screenshot of Rag-Bot:**
+<div align="center">
+  <img src="./assets/Screenshot_Rag_bot.png" alt="NeedleDB RAG Chatbot" width="1000" />
+</div>
+
+## Demo
+
+A video demo going thorugh all features starting from `docker compose up`:
+[Video_Demo](https://youtu.be/kfnTPKDshtE)
 
 ## Known Limitations
 

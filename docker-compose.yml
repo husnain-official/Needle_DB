@@ -1,9 +1,10 @@
 services:
 
   cpp_server:
-    build:
-      context: .
-      dockerfile: Dockerfile.cpp
+    # build:
+      # context: .
+      # dockerfile: Dockerfile.cpp
+    image: husnain80/needledb-server:latest
     ports:
       - "8080:8080"
     volumes:
@@ -15,9 +16,10 @@ services:
       - needledb_net
 
   python_app:
-    build:
-      context: .
-      dockerfile: Dockerfile.python
+    # build:
+      # context: .
+      # dockerfile: Dockerfile.python
+    image: husnain80/needledb-app:latest
     ports:
       - "8501:8501"
     volumes:
