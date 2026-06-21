@@ -8,7 +8,7 @@ NeedleDB is a custom C++ vector database engine and companion Python Retrieval-A
 ![Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-**Links:** [Documentation](https://needle-db.web.app) | [Demo](https://youtu.be/kfnTPKDshtE) | [Docker Hub](https://hub.docker.com/u/husnain80)
+**Links:** [Documentation](https://needle-db.web.app) | [Demo](https://drive.google.com/drive/folders/1TcvqczU3JgivnE-Mcrsl8fNHhZMMHtjY?usp=drive_link) | [Docker Hub](https://hub.docker.com/u/husnain80)
 ## What Is NeedleDB?
 
 NeedleDB provides the underlying infrastructure required for semantic search and Retrieval-Augmented Generation (RAG) pipelines. It ingests unstructured text, stores high-dimensional vector embeddings, and executes mathematical similarity computations to retrieve contextually relevant data. This architecture enables local Large Language Models to answer queries grounded in custom knowledge bases rather than relying solely on pre-trained neural network weights.
@@ -193,7 +193,7 @@ Project Root/
 ## Demo
 
 A video demo going thorugh all features starting from `docker compose up`:
-[Video_Demo](https://youtu.be/kfnTPKDshtE)
+[Video_Demo](https://drive.google.com/drive/folders/1TcvqczU3JgivnE-Mcrsl8fNHhZMMHtjY?usp=drive_link)
 
 ## Known Limitations
 
