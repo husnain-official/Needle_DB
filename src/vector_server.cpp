@@ -60,7 +60,7 @@ void Vector_Server::stop()
 void Vector_Server::run()
 {
     // AUTO-LOAD on startup, Read the data from the database and load into RAM
-    Header h = file_manager.read_header();
+    DB_header h = file_manager.read_header();
     if (h.total_vector_count > 0)
     {
         Parse_result res = vector_store.set_dims_(h.dimensions);
@@ -157,7 +157,7 @@ void Vector_Server::handle_client(int client_fd)
             if ((command.rfind("INSERT", 0)) == 0) // INSERT ID DIMS key1=abc key2=def key3=xyz F1 F2 F3 ... Fn
             {
                 Vector v;
-                Parse_result results = insert_parsing(v, command, con);
+                Parse_result results = insert_parsing(v, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -194,7 +194,7 @@ void Vector_Server::handle_client(int client_fd)
             {
                 Vector query_v;
                 size_t top_k = 0;
-                Parse_result results = query_parsing(query_v, top_k, command, con);
+                Parse_result results = query_parsing(query_v, top_k, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -253,7 +253,7 @@ void Vector_Server::handle_client(int client_fd)
             {
                 std::string id = "";
                 Parse_result results;
-                results = delete_parsing(id, command, con);
+                results = delete_parsing(id, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -291,7 +291,7 @@ void Vector_Server::handle_client(int client_fd)
             else if ((command.rfind("SAVE", 0)) == 0) // SAVE
             {
                 Parse_result results;
-                results = save_parsing(command, 0, con);
+                results = save_parsing(command, 0);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -306,7 +306,7 @@ void Vector_Server::handle_client(int client_fd)
             else if ((command.rfind("LOAD", 0)) == 0) // LOAD
             {
                 Parse_result results;
-                results = save_parsing(command, 1, con);
+                results = save_parsing(command, 1);
                 if (!results.success) // save and load -> 4 chars same logic
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -314,8 +314,8 @@ void Vector_Server::handle_client(int client_fd)
                 }
                 // do load things
                 { // as this is the connection point for all three classes, code will be here
-                    Header h = file_manager.read_header();
-                    results = vector_store.set_dims_(h.dimensions);
+                    DB_header h = file_manager.read_header();
+                    results = vector_store.set_dims_(schema::DIMENSIONS);
                     if (!results.success)
                     {
                         send(client_fd, results.message.data(), results.message.length(), 0);
@@ -324,7 +324,7 @@ void Vector_Server::handle_client(int client_fd)
                     vector_store.clear();
                     // read and write
                     std::string id_buf;
-                    std::vector<float> embd_buf(vector_store.get_dims());
+                    std::vector<float> embd_buf(schema::DIMENSIONS);
                     Metadata_entry mdata_arr[h.max_kv];
                     for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
                     {

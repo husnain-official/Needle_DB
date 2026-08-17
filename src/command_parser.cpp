@@ -11,7 +11,7 @@ void next_equal_changes(const std::string &command, const std::size_t &index, st
     to_move = next_space_index - index;
 }
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
-Parse_result insert_parsing(Vector &v, const std::string &command, const Config con)
+Parse_result insert_parsing(Vector &v, const std::string &command)
 {
     try
     {
@@ -27,7 +27,7 @@ Parse_result insert_parsing(Vector &v, const std::string &command, const Config 
         index = next_space_index + 1; // 7
         next_space_changes(command, index, next_space_index, to_move);
         // Check-02
-        if ((to_move < 1 or to_move > con.id_length) or (next_space_index == std::string::npos)) // range 1-32
+        if ((to_move < 1 or to_move > schema::ID_LENGTH) or (next_space_index == std::string::npos)) // range 1-32
         {
             //  again we have not done anything yet, so nothing to reset
             if (next_space_index == std::string::npos)
@@ -47,14 +47,14 @@ Parse_result insert_parsing(Vector &v, const std::string &command, const Config 
         index = next_space_index + 1; // 40(if to_move was 33)
         next_space_changes(command, index, next_space_index, to_move);
         //  Check-03
-        if ((to_move != con.dims_no_of_digits) or (next_space_index == std::string::npos))
+        if ((to_move != schema::DIMENSIONS_NO_OF_DIGITS) or (next_space_index == std::string::npos))
         {
             //  we should reset v1.id but unnecessary
             return {false, "ERROR <Incorrect 'Dimension' value entered>\n"};
         }
         v.dims = (std::stoi(command.substr(index, to_move)));
         // Check-04
-        if (v.dims != con.dims)
+        if (v.dims != schema::DIMENSIONS)
         {
             return {false, "ERROR <Invalid dimensions entered\n>"};
         }
@@ -111,10 +111,10 @@ Parse_result insert_parsing(Vector &v, const std::string &command, const Config 
             //
         }
         // Embeddings loop
-        v.data.resize(con.dims);
-        for (std::size_t i = 0; i < con.dims; i++)
+        v.data.resize(schema::DIMENSIONS);
+        for (std::size_t i = 0; i < schema::DIMENSIONS; i++)
         {
-            if (i != (con.dims - 1))
+            if (i != (schema::DIMENSIONS - 1))
             {
                 next_space_changes(command, index, next_space_index, to_move);
                 //  Check-05
@@ -142,7 +142,7 @@ Parse_result insert_parsing(Vector &v, const std::string &command, const Config 
         return {false, "ERROR <Parsing failed: Non-numeric value encountered>\n"};
     }
 }
-Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command, const Config con)
+Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command)
 {
     try
     {
@@ -152,7 +152,7 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
         const size_t MAX_TOP_K = 30;
         int top_k_raw = 0;
         // Zero-initialise all metadata slots upfront
-        for (size_t m = 0; m < con.meta_data_pairs; m++)
+        for (size_t m = 0; m < schema::META_DATA_KP_PAIRS; m++)
         {
             v.metadata[m].key[0] = '\0';
             v.metadata[m].value[0] = '\0';
@@ -194,13 +194,13 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
         }
         v.dims = static_cast<size_t>(dims_raw);
         // Check-04
-        if (v.dims != con.dims)
+        if (v.dims != schema::DIMENSIONS)
         {
             return {false, "ERROR <Invalid dimensions entered\n>"};
         }
 
         size_t meta_count = 0;
-        while (meta_count < con.meta_data_pairs && next_space_index != std::string::npos)
+        while (meta_count < schema::META_DATA_KP_PAIRS && next_space_index != std::string::npos)
         {
             // Peek at the next token without committing index yet
             std::size_t peek_start = next_space_index + 1;
@@ -234,7 +234,7 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
             {
                 return {false, "ERROR <Metadata key is empty>\n"};
             }
-            if (key.size() > con.meta_data_length)
+            if (key.size() > schema::META_DATA_LENGTH)
             {
                 return {false, "ERROR <Metadata key '" + key + "' exceeds 32 chars>\n"};
             }
@@ -242,13 +242,13 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
             {
                 return {false, "ERROR <Metadata value for key '" + key + "' is empty>\n"};
             }
-            if (val.size() > con.meta_data_length)
+            if (val.size() > schema::META_DATA_LENGTH)
             {
                 return {false, "ERROR <Metadata value for key '" + key + "' exceeds 32 chars>\n"};
             }
 
-            std::strncpy(v.metadata[meta_count].key, key.c_str(), con.meta_data_length);
-            std::strncpy(v.metadata[meta_count].value, val.c_str(), con.meta_data_length);
+            std::strncpy(v.metadata[meta_count].key, key.c_str(), schema::META_DATA_LENGTH);
+            std::strncpy(v.metadata[meta_count].value, val.c_str(), schema::META_DATA_LENGTH);
             // this is handeled by, write vector(DISK) and make entry(RAM)
             // v.metadata[meta_count].key[meta_data_length_set] = '\0';
             // v.metadata[meta_count].value[meta_data_length_set] = '\0';
@@ -256,11 +256,11 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
             meta_count++;
         }
         // Embeddings loop
-        v.data.resize(con.dims);
-        for (std::size_t i = 0; i < con.dims; i++)
+        v.data.resize(schema::DIMENSIONS);
+        for (std::size_t i = 0; i < schema::DIMENSIONS; i++)
         {
             index = next_space_index + 1;
-            if (i != (con.dims - 1))
+            if (i != (schema::DIMENSIONS - 1))
             {
                 next_space_changes(command, index, next_space_index, to_move);
                 //  Check-05
@@ -284,7 +284,7 @@ Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command,
         return {false, "ERROR <Parsing failed: Non-numeric value encountered>\n"};
     }
 }
-Parse_result delete_parsing(std::string &id, const std::string &command, const Config con)
+Parse_result delete_parsing(std::string &id, const std::string &command)
 {
     std::size_t index = 0,
                 next_space_index = 0, to_move = 0;
@@ -311,7 +311,7 @@ Parse_result delete_parsing(std::string &id, const std::string &command, const C
     id = command.substr(index, to_move);
     return {true, ""};
 }
-Parse_result save_parsing(std::string &command, bool state, const Config con)
+Parse_result save_parsing(std::string &command, bool state)
 {
     command.erase(std::remove(command.begin(), command.end(), ' '), command.end());
     int len = command.length();

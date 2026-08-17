@@ -25,7 +25,6 @@ const std::string &Vector_store::get_id(size_t i) const
 {
     return ids_[i];
 }
-const std::size_t Vector_store::get_dims() const { return dims_; }
 const std::size_t Vector_store::get_count() const { return count_; }
 Parse_result Vector_store::get_index_in_ram(const std::string &id)
 {
@@ -42,9 +41,9 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
     {
         matching_indices.clear();
 
-        // Count how many query pairs are actually set (non-empty key)
+        // Count how many metadata pairs are actually set (non-empty key)
         size_t query_pair_count = 0;
-        for (size_t m = 0; m < conditions.meta_data_pairs; m++)
+        for (size_t m = 0; m < schema::META_DATA_KP_PAIRS; m++)
         {
             if (mdata_arr[m].key[0] != '\0')
                 query_pair_count++;
@@ -71,7 +70,7 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
 
             // Every non-empty query pair must exist with a matching value
             bool all_match = true;
-            for (size_t m = 0; m < conditions.meta_data_pairs; m++)
+            for (size_t m = 0; m < schema::META_DATA_KP_PAIRS; m++)
             {
                 if (mdata_arr[m].key[0] == '\0')
                     continue; // unused slot, skip
@@ -102,7 +101,7 @@ Vector_index *Vector_store::get_index() const { return index_; }
 // 2. setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
-    if (dim != conditions.dims)
+    if (dim != schema::DIMENSIONS)
         return {false, "ERROR <Mismatch of dimensions in file and in program set value>\n"};
     dims_ = dim;
     return {true, ""};
@@ -120,14 +119,14 @@ void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::stri
         return;
     //  setup the inner map
     std::map<std::string, std::string> inner_key_val;
-    for (int i = 0; i < conditions.meta_data_pairs; i++)
+    for (int i = 0; i < schema::META_DATA_KP_PAIRS; i++)
     {
         // skip empty key/values
         if (mdata_arr[i].key[0] == '\0')
             continue;
         // overflow prevention
-        size_t key_len = strnlen(mdata_arr[i].key, conditions.meta_data_length);
-        size_t val_len = strnlen(mdata_arr[i].value, conditions.meta_data_length);
+        size_t key_len = strnlen(mdata_arr[i].key, schema::META_DATA_LENGTH);
+        size_t val_len = strnlen(mdata_arr[i].value, schema::META_DATA_LENGTH);
         //  safe-strings
         std::string safe_key(mdata_arr[i].key, key_len);
         std::string safe_val(mdata_arr[i].value, val_len);

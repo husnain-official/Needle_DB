@@ -1,57 +1,48 @@
 #include "file_manager.h"
 // --- Constructor
-File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs)
+File_manager::File_manager(const std::string &path)
 {
-    // Purpose: Boot-up the litteral 'file-manager'
-    // First initilize the header
-    header_.dimensions = dims;
-    header_.id_length = id_len;
-    header_.kv_length = kv_len;
-    header_.max_kv = kv_max_pairs;
-    memcpy(header_.magic_number, "VDB", 4);
-    memset(header_.padding, 0, sizeof(header_.padding));
-    header_.total_vector_count = 0;
-    header_.live_vector_count = 0;
-    header_.version = 4;
-    // Initilize other elements
-    record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (header_.kv_length * (header_.max_kv * 2));
-    // record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (sizeof(Metadata_entry)); thiss will make it not work
+    // 1. Initilize elements of 'File_manager' instance being created.
+    header_ = DB_header(); // Create a instance of a 'Header' with pre-filled data, from 'schema.hpp'.
+    record_size_ = sizeof(DB_entry);
+    // 2. If no file, then create it and write 'header_' to it, else just open it and read 'header_'.
     if (!(std::filesystem::exists(path)))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
         if (!(file_.is_open()))
-            throw std::runtime_error("Cannot create DB file: " + path);
+            throw std::runtime_error("[File_manager()] | Cannot create DB file: " + path);
         flush_header();
-        std::cout << "Data-Base Created\n";
+        std::cout << "[File_manager()] | Data-Base Created\n";
     }
     else
     {
         file_.open(path, std::ios::in | std::ios::out | std::ios::binary);
     }
     if (!file_.is_open())
-        throw std::runtime_error("Cannot create DB file: " + path);
+        throw std::runtime_error("[File_manager()] | Cannot create DB file: " + path);
     header_ = read_header();
-    if (std::strncmp(header_.magic_number, "VDB", 3) != 0)
+    // 3. Check if schema matches, else throw error.
+    if (std::strncmp(header_.magic_number, schema::MAGIC_NUMBER, 4) != 0)
     {
-        throw std::runtime_error("Invalid file format: Magic number mismatch.");
+        throw std::runtime_error("[File_manager()] | Invalid file format: Magic number mismatch.");
     }
-    if (header_.version != 4)
+    if (header_.version != schema::VERSION)
     {
-        throw std::runtime_error("Schema mismatch: Incompatible database version. Expected Version 4.");
+        throw std::runtime_error("[File_manager()] | Schema mismatch: Incompatible database version. Expected Version 4.");
     }
-    if (header_.dimensions != dims or header_.id_length != id_len or header_.kv_length != kv_len or header_.max_kv != kv_max_pairs)
+    if (header_.dimensions != schema::DIMENSIONS or header_.id_length != schema::ID_LENGTH or header_.kv_length != schema::META_DATA_LENGTH or header_.max_kv != schema::META_DATA_KP_PAIRS)
     {
-        throw std::runtime_error("Schema mismatch: File dimensions/ID length/Meta-data do not match provided arguments.");
+        throw std::runtime_error("[File_manager()] | Schema mismatch: File dimensions/ID length/Meta-data do not match provided arguments.");
     }
-    std::cout << "Data-Base path opened successfully\n";
+    std::cout << "[File_manager()] | Data-Base path opened successfully\n";
 }
 // --- Header-Related-Functions
-Header File_manager::read_header()
+DB_header File_manager::read_header()
 {
-    Header h;
+    DB_header h;
     file_.clear();
     file_.seekg(0);
-    file_.read(reinterpret_cast<char *>(&h), sizeof(Header));
+    file_.read(reinterpret_cast<char *>(&h), sizeof(DB_header));
     return h;
 }
 bool File_manager::flush_header()
@@ -59,15 +50,14 @@ bool File_manager::flush_header()
     file_.clear();
     // After any change/insersion update header in the database
     file_.seekp(0);
-    file_.write(reinterpret_cast<char *>(&header_), sizeof(Header));
+    file_.write(reinterpret_cast<char *>(&header_), sizeof(DB_header));
     file_.flush();
     return file_.good();
 }
 // --- Getters
 uint64_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
 uint64_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
-uint64_t File_manager::get_record_size() const { return record_size_; }
-uint64_t File_manager::get_record_offset(uint64_t index) const { return (sizeof(Header) + index * record_size_); }
+uint64_t File_manager::get_record_offset(uint64_t index) const { return (sizeof(DB_header) + index * record_size_); }
 void File_manager::compact() {}
 // --- Core-Operations
 bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr)

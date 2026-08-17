@@ -4,17 +4,8 @@
 #include <string>
 #include <map>
 #include <vector>
+#include "schema.hpp"
 // --- Data-Structures
-/**
- * @brief Fixed-size character arrays storing a single key-value string pair.
- * @note Maximum length for both key and value is 32 bytes.
- * @warning Does not guarantee null termination if strings exactly match the 32-byte limit.
- */
-struct Metadata_entry
-{
-    char key[32];
-    char value[32];
-};
 /**
  * @brief Core memory representation of an embedding and its associated metadata.
  * @note Supports a strict maximum of 3 metadata entries per record.
@@ -25,6 +16,21 @@ struct Vector
     int dims;
     Metadata_entry metadata[3];
     std::vector<float> data;
+};
+// ----- Config-Stuct -------------------------
+/**
+ * @brief Defines system-wide operational constraints populated during startup.
+ * @note Instances are passed by constant reference throughout the application lifecycle.
+ */
+struct Config
+{
+    std::string port = "8080";
+    std::string vecdb_file_path = "./data/database.vdb";
+    std::size_t dims = 1024;
+    std::size_t dims_no_of_digits = 4;
+    std::size_t id_length = 32;
+    std::size_t meta_data_length = 32;
+    std::size_t meta_data_pairs = 3;
 };
 /**
  * @brief Carrier structure for operation outcomes and diagnostic text.

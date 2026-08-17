@@ -16,9 +16,9 @@ int main()
         return -1;
     }
     // ----------------------Declare All Components-------------------------
-    Vector_store database(env);
+    Vector_store database{};
     // Configure Database
-    File_manager file_handler(env.vecdb_file_path, env.dims, env.id_length, env.meta_data_length, env.meta_data_pairs);
+    File_manager file_handler(env.vecdb_file_path);
     // Configure Server
     Vector_Server server(env.port, database, file_handler, env);
 

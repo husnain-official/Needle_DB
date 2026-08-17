@@ -1,7 +1,7 @@
 #ifndef COMMAND_PARSER
 #define COMMAND_PARSER
 #include "vector_store.h" // For Vector Struct
-#include "env_config.hpp" // For Config Struct
+#include "schema.hpp"
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
 /**
  * @brief Extracts identifier, metadata, and embedding components from a raw insertion command string.
@@ -12,7 +12,7 @@
  * @note Expects the exact format: INSERT <id> <dims> [key=val ...] f1 f2 ... fn
  * @warning Fails securely if the dimensional count or string lengths exceed configured limits
  */
-Parse_result insert_parsing(Vector &, const std::string &, const Config);
+Parse_result insert_parsing(Vector &, const std::string &);
 /**
  * @brief Decodes network queries into actionable search constraints and target embeddings.
  * @param v Vector struct populated with query metadata and floats
@@ -23,7 +23,7 @@ Parse_result insert_parsing(Vector &, const std::string &, const Config);
  * @note Limits metadata constraints strictly to the configured maximum pairs
  * @warning Silently clamps top_k to a hardcoded maximum if the requested value is excessively large
  */
-Parse_result query_parsing(Vector &, size_t &, const std::string &, const Config);
+Parse_result query_parsing(Vector &, size_t &, const std::string &);
 /**
  * @brief Extracts a target vector identifier from a client deletion command.
  * @param id Output string populated with the extracted identifier
@@ -32,7 +32,7 @@ Parse_result query_parsing(Vector &, size_t &, const std::string &, const Config
  * @return Success status paired with an empty string or error diagnostic
  * @warning Does not verify if the extracted identifier actually exists within the storage engine
  */
-Parse_result delete_parsing(std::string &, const std::string &, const Config);
+Parse_result delete_parsing(std::string &, const std::string &);
 /**
  * @brief Validates syntax for explicit persistence synchronization or memory reload commands.
  * @param command Raw input string directly from the socket buffer
@@ -41,7 +41,7 @@ Parse_result delete_parsing(std::string &, const std::string &, const Config);
  * @return Struct containing operation success status
  * @warning Mutates the input command string by stripping all whitespace characters internally
  */
-Parse_result save_parsing(std::string &, bool, const Config);
+Parse_result save_parsing(std::string &, bool);
 // --- Helpers
 /**
  * @brief Scans forward to locate the next space delimiter and calculates the advancement stride.

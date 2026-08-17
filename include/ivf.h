@@ -8,7 +8,7 @@
 #include <numeric>
 #include <random>
 #include <algorithm>
-
+#include "schema.hpp"
 // --- Abstract Base Class ---
 class Vector_index
 {

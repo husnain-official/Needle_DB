@@ -1,0 +1,79 @@
+#pragma once
+#include <cstdint>
+//  ----------------------------------------- Engine-Schema ------------------------------------------
+namespace schema
+{
+    constexpr uint16_t DIMENSIONS = 1024;
+    constexpr uint8_t DIMENSIONS_NO_OF_DIGITS = 4;
+    constexpr uint8_t ID_LENGTH = 32;
+    constexpr uint8_t META_DATA_LENGTH = 32;
+    constexpr uint8_t META_DATA_KP_PAIRS = 3;
+    constexpr uint8_t VERSION = 5;
+    constexpr char MAGIC_NUMBER[4] = {'V', 'D', 'B', '\0'};
+}
+//  ---------------------------------------- Data-Base-Schema ----------------------------------------
+#pragma pack(push, 1) // No hidden padding! Keep the bytes explicit.
+
+/**
+ * @brief 32-byte packed binary schema definition for the persistent database file.
+ * @note Strictly packed to 1-byte alignment to prevent cross-platform memory padding inconsistencies.
+ *
+ * @param live_vector_count  entires with flag '1'
+ * @param total_vector_count includes entries with flag '0' / deleted vectors
+ * @param magic_number       {'V','D','B','\0'}, required file-format
+ * @param dimensions         dims of each vector = 1536/1024/768
+ * @param version            version of database
+ * @param id_length          fixed bytes of "id_name"
+ * @param kv_length          fixed bytes of 'keys' and 'values' for metadata
+ * @param max_kv             fixed number of key value pairs per record
+ * @param padding            future-proofing to ensure 32 bytes size of struct
+ */
+struct DB_header
+{
+    // 8-byte types
+    uint64_t live_vector_count = 0;
+    uint64_t total_vector_count = 0;
+    // 4-byte types
+    char magic_number[4] = {'V', 'D', 'B', '\0'};
+    // 2-byte types
+    uint16_t dimensions = schema::DIMENSIONS;
+    // 1-byte types
+    uint8_t version = schema::VERSION;
+    uint8_t id_length = schema::ID_LENGTH;
+    uint8_t kv_length = schema::META_DATA_LENGTH;
+    uint8_t max_kv = schema::META_DATA_KP_PAIRS;
+    // Pad to exactly 32 bytes (32 - 26 = 6 bytes)
+    uint8_t padding[6]{'\0'};
+};
+static_assert(sizeof(DB_header) == 32, "[schema.hpp]   |   Header layout mismatch.");
+
+/**
+ * @brief Fixed-size character arrays storing a single key-value string pair.
+ * @note Maximum length for both key and value is 32 bytes.
+ * @warning Does not guarantee null termination if strings exactly match the 32-byte limit.
+ */
+struct Metadata_entry
+{
+    char key[32]{'\0'};
+    char value[32]{'\0'};
+};
+static_assert(sizeof(Metadata_entry) == 64, "[schema.hpp]  |  Key-Value layout mismatch.");
+
+/**
+ * @brief Represents a single vector record in the database.
+ *
+ * @param flag       Status of the entry (e.g., 1 for active/live, 0 for deleted).
+ * @param id         Unique 32-bit identifier for the record.
+ * @param meta_data  Array of key-value pairs storing associated metadata.
+ * @param embeddings The high-dimensional vector data array.
+ */
+struct DB_entry
+{
+    uint8_t flag = 1;
+    uint32_t id{'\0'};
+    Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{'\0'};
+    float embeddings[schema::DIMENSIONS]; // Question: If i auto-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
+};
+static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint32_t) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
+
+#pragma pack(pop)

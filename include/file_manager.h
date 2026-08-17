@@ -6,46 +6,21 @@
 #include <vector>
 #include <cstdint>    // for uint64_t
 #include <fstream>    // for file handeling
-#include <filesystem> // for verifying if database's existance
+#include <filesystem> // for verifying database's existance
 #include <algorithm>  // for std::find
 #include <iterator>   // for std::distance
 #include "types.h"    // for convinient structs
+#include "schema.hpp" // for direct schema-enforcing
 
-#pragma pack(push, 1) // No hidden padding!, keep the bytes explicit
-/**
- * @brief 32-byte packed binary schema definition for the persistent database file.
- * @note Strictly packed to 1-byte alignment to prevent cross-platform memory padding inconsistencies.
- */
-struct Header
-{
-    // 8-byte types
-    uint64_t live_vector_count;  //  records
-    uint64_t total_vector_count; //  includes entries with flag '0' / deleted vectors
-    // 4-byte types
-    uint32_t dimensions;  //  dims of each vector = 1536/1024/768
-    char magic_number[4]; // {'V','D','B','\0'}, required file-format
-    // 1-byte types
-    uint8_t version;   //  version of database
-    uint8_t id_length; //  fixed bytes of "id_name"
-    uint8_t kv_length; //  fixed bytes of 'keys' and 'values' for metadata
-    uint8_t max_kv;    //  fixed number of key value pairs per record
-    // Pad to exactly 32 bytes (32 - 28 = 4 bytes)
-    uint8_t padding[4]; //  future-proof
-};
-#pragma pack(pop)
 class File_manager
 {
 public:
     /**
      * @brief Initializes the binary file handler and validates schema compatibility.
      * @param path Target filesystem path for the persistent database file
-     * @param dims Expected embedding dimensionality to enforce
-     * @param id_len Fixed byte length allocated for string identifiers
-     * @param kv_len Fixed byte length allocated for metadata strings
-     * @param kv_max_pairs Maximum allowed metadata key-value pairs per record
      * @warning Throws std::runtime_error if an existing file schema mismatches configuration
      */
-    explicit File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs);
+    explicit File_manager(const std::string &path);
 
     // Core operations — all O(1) with fixed record size, except find by id O(n)
     /**
@@ -71,7 +46,7 @@ public:
      * @param index Target sequential record offset
      * @return True if the tombstone bit successfully writes, false on failure
      * @warning Does not reclaim physical disk space
-     */ 
+     */
     bool delete_vector(uint64_t index);
     /**
      * @brief Locates the logical disk offset of a specific string identifier.
@@ -92,7 +67,7 @@ public:
      * @return Fully populated header struct
      * @warning Manipulates the internal file stream cursor position
      */
-    Header read_header();
+    DB_header read_header();
 
     // Helpers/getters
     /**
@@ -102,11 +77,10 @@ public:
     void compact();
     uint64_t get_live_vector_count() const;
     uint64_t get_total_vector_count() const;
-    uint64_t get_record_size() const;
 
 private:
     std::fstream file_;
-    Header header_;
+    DB_header header_;
     uint64_t record_size_;
     /**
      * @brief Computes the absolute physical byte offset for a specific sequential record.

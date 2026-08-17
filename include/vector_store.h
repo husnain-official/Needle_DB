@@ -12,7 +12,7 @@
 #include <cstdint>          // for uint64_t
 #include "types.h"          // for convinient structs
 #include "similarities.hpp" // for similarity functions
-#include "env_config.hpp"
+#include "schema.hpp"
 // #include "ivf.h"            // for ivf data
 
 // --Index-Creation
@@ -24,23 +24,20 @@ class Vector_store
     std::vector<std::string> ids_;
     std::vector<float> embeddings_;
     std::map<std::string, std::map<std::string, std::string>> metadata_;
-    std::size_t dims_;
-    std::size_t count_;
+    std::size_t dims_ = schema::DIMENSIONS;
+    std::size_t count_ = 0;
     Vector_index *index_ = nullptr;
-    // THe pre-set configrations from .env
-    const Config conditions;
 
 public:
     /**
      * @brief Initializes the memory storage engine using immutable environment parameters.
      * @param con Loaded configuration struct dictating operational constraints
      */
-    Vector_store(const Config con) : conditions(con), dims_(con.dims), count_(0) {}
+    Vector_store() {}
     ~Vector_store() {}
     // Getters
     const float *get_embedding(size_t i) const;
     const std::string &get_id(size_t i) const;
-    const std::size_t get_dims() const;
     const std::size_t get_count() const;
     Parse_result get_metadata_entry() const;
     /**

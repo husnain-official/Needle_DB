@@ -21,7 +21,7 @@ void IVF_index::build_(Vector_store &store)
 {
     store_ref = &store;
     size_t num_vectors = store.get_count();
-    size_t dims = store.get_dims();
+    size_t dims = schema::DIMENSIONS;
 
     // Always initialize lists, even if empty
     lists.clear();
@@ -93,7 +93,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
     if (!store_ref || lists.empty())
         return {};
 
-    size_t dims = store_ref->get_dims();
+    size_t dims = schema::DIMENSIONS;
 
     // 1. Find the top 'nprobe' closest centroids to the query
     std::vector<std::pair<float, size_t>> centroid_dists;
@@ -144,7 +144,7 @@ void IVF_index::add_(std::size_t index)
     if (!store_ref || centroids.empty() || lists.empty())
         return;
 
-    size_t dims = store_ref->get_dims();
+    size_t dims = schema::DIMENSIONS;
     const float *vec = store_ref->get_embedding(index);
     size_t nearest = find_nearest_centroid(vec, dims);
     lists[nearest].push_back(index);

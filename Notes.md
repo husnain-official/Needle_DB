@@ -17,7 +17,13 @@ Size:   live_vector (8-Bytes), dead_vector(8-Bytes), dimensions(4-Bytes), magic-
 
 Note: Vector-struct is identicle to the structure of a entry, but file_manger.h/cpp does not use vector for it but uses, individual elements passed through as parameters. 
 ```
-### Problems Faced Booting up (WSL, ollama on windows):
+### Rants:
+1. What is id_length, kv_length, header_length ? What length, rename it all to size. ITS HOW MUCH SIZE THEY ARE USING IN MEMORY NOT LENGTH 
+2. What is kv_lenght, kv_pair ? I am not going to get it unless i go and read the doxy that it is key-value
+3. Why is dimensions in Header struct 4 bytes ? thats 4,294,967,295 (roughly 4.29 billion) but it will work fine for a 2byte version uint16_t which can hold 65,535.    (IMPORTANT)
+4. What if i change all arrays to std::arrays ? is it a good decision or a bad one ? 
+
+### Problems Faced Booting up (WSL, ollama on windows): 
 1. After the C++ build folder and starting the engine/server, if you follow readme line for line, it doesnt tell you to go back to root directory and run the python commands there. So, virtual enviournment is created inside the build folder.   
 ```
 Even after following the lines of readme line for line, the server will show: couldn't read .env
