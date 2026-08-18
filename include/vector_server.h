@@ -59,6 +59,7 @@ private:
     int server_fd;
     const Config con;
     std::string port_num;
+    Parser parser = Parser{};
     /**
      * @brief Processes and executes line-delimited text commands from an active socket.
      * @param client_fd Open file descriptor bound to the communicating client

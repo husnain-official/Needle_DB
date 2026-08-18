@@ -1,5 +1,10 @@
 #pragma once
 #include <cstdint>
+/*
+    1. DE_entry and Vector both have many overlapping elements, but they are different as they are used for seperate purposes and places.
+        DB_entry usage is limited to file_manager's internals.
+        Vector is for vector_store's internals and other parts of the system.
+*/
 //  ----------------------------------------- Engine-Schema ------------------------------------------
 namespace schema
 {
@@ -8,8 +13,10 @@ namespace schema
     constexpr uint8_t ID_LENGTH = 32;
     constexpr uint8_t META_DATA_LENGTH = 32;
     constexpr uint8_t META_DATA_KP_PAIRS = 3;
+    constexpr uint16_t TEXT_MAX_LENGTH = 999;
     constexpr uint8_t VERSION = 5;
     constexpr char MAGIC_NUMBER[4] = {'V', 'D', 'B', '\0'};
+    constexpr uint8_t MAX_K_SIMILAR = 30;
 }
 //  ---------------------------------------- Data-Base-Schema ----------------------------------------
 #pragma pack(push, 1) // No hidden padding! Keep the bytes explicit.
@@ -43,7 +50,7 @@ struct DB_header
     uint8_t kv_length = schema::META_DATA_LENGTH;
     uint8_t max_kv = schema::META_DATA_KP_PAIRS;
     // Pad to exactly 32 bytes (32 - 26 = 6 bytes)
-    uint8_t padding[6]{'\0'};
+    uint8_t padding[6]{};
 };
 static_assert(sizeof(DB_header) == 32, "[schema.hpp]   |   Header layout mismatch.");
 
@@ -54,8 +61,8 @@ static_assert(sizeof(DB_header) == 32, "[schema.hpp]   |   Header layout mismatc
  */
 struct Metadata_entry
 {
-    char key[32]{'\0'};
-    char value[32]{'\0'};
+    char key[32]{};
+    char value[32]{};
 };
 static_assert(sizeof(Metadata_entry) == 64, "[schema.hpp]  |  Key-Value layout mismatch.");
 
@@ -70,10 +77,22 @@ static_assert(sizeof(Metadata_entry) == 64, "[schema.hpp]  |  Key-Value layout m
 struct DB_entry
 {
     uint8_t flag = 1;
-    uint32_t id{'\0'};
-    Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{'\0'};
-    float embeddings[schema::DIMENSIONS]; // Question: If i auto-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
+    char id[schema::ID_LENGTH]{};
+    uint16_t text_length = 0;
+    char text[schema::TEXT_MAX_LENGTH]{};
+    Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{};
+    uint8_t meta_data_count = 0;
+    float embeddings[schema::DIMENSIONS]; // Question: If i zero-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
 };
-static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint32_t) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
+static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + (sizeof(char) * schema::TEXT_MAX_LENGTH) + (sizeof(char) * schema::ID_LENGTH) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
 
+struct Vector
+{
+    std::string id = std::string(schema::ID_LENGTH, '\0');
+    uint64_t text_offset = 0;
+    uint16_t text_length = 0;
+    Metadata_entry meta_data[3]{};
+    uint8_t meta_data_count = 0;
+    std::vector<float> embeddings = std::vector(schema::DIMENSIONS, 0.0f);
+};
 #pragma pack(pop)

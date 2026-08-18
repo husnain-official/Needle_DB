@@ -48,7 +48,6 @@ DB_header File_manager::read_header()
 bool File_manager::flush_header()
 {
     file_.clear();
-    // After any change/insersion update header in the database
     file_.seekp(0);
     file_.write(reinterpret_cast<char *>(&header_), sizeof(DB_header));
     file_.flush();
@@ -58,15 +57,12 @@ bool File_manager::flush_header()
 uint64_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
 uint64_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
 uint64_t File_manager::get_record_offset(uint64_t index) const { return (sizeof(DB_header) + index * record_size_); }
-void File_manager::compact() {}
 // --- Core-Operations
 bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr)
 {
     file_.clear();
     // 1.   move the write cursor to the eof
-    // file_.seekp(get_record_offset(header_.total_vector_count));
     file_.seekp(0, std::ios::end);
-    // file_.seekp(get_record_offset(header_.total_vector_count));
     // 2.   intilize the flag
     char active_flag = 1;
     file_.write(&active_flag, 1);
@@ -175,6 +171,7 @@ bool File_manager::delete_vector(uint64_t index)
     // 4.   Return file-state
     return file_.good();
 }
+bool File_manager::compact() {}
 int64_t File_manager::find_by_id(const std::string &id)
 {
     // Prevent false matches if search ID is too long

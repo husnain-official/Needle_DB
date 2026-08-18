@@ -6,17 +6,7 @@
 #include <vector>
 #include "schema.hpp"
 // --- Data-Structures
-/**
- * @brief Core memory representation of an embedding and its associated metadata.
- * @note Supports a strict maximum of 3 metadata entries per record.
- */
-struct Vector
-{
-    std::string id;
-    int dims;
-    Metadata_entry metadata[3];
-    std::vector<float> data;
-};
+
 // ----- Config-Stuct -------------------------
 /**
  * @brief Defines system-wide operational constraints populated during startup.

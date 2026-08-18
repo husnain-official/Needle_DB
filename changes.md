@@ -9,14 +9,25 @@ First seperate the source of schema from the source code, so we can start making
     what this means: 
         1. We dont have to manually send parameters, 
         2. We dont have to set values to the header, but a file_manager creates its own header, and after construction it already has correct data in it.
-
 4. Got updated:
     -> File_manager()
     -> Deleted:     env_config.hpp 
     -> Removed config instances dependency from each file and shifted to direct use of constexprs from schema.hpp
+    -> 
     ->
     ->
-    ->
-
 5. Did not remove the ssot data from the .env file as python side still uses it, but engine is fully free from it and only reads .env for path and port
+
+### 2nd
+1. Updated the command_parser to the new command formats.
+2. Moved 'Vector' struct form types.hpp to schema.hpp
+
+
+
+
+### Unexpted Behavior/TO-be-Changed:
+1. **COMMAND-PARSER**:  (Either change or document)
+- Why does insert does not check for duplicates equal signs in key=value while query does ?
+- Why does SAVE/LOAD allow S A V E and L O A D. 
+- 
 

@@ -21,7 +21,6 @@ Note: Vector-struct is identicle to the structure of a entry, but file_manger.h/
 1. What is id_length, kv_length, header_length ? What length, rename it all to size. ITS HOW MUCH SIZE THEY ARE USING IN MEMORY NOT LENGTH 
 2. What is kv_lenght, kv_pair ? I am not going to get it unless i go and read the doxy that it is key-value
 3. Why is dimensions in Header struct 4 bytes ? thats 4,294,967,295 (roughly 4.29 billion) but it will work fine for a 2byte version uint16_t which can hold 65,535.    (IMPORTANT)
-4. What if i change all arrays to std::arrays ? is it a good decision or a bad one ? 
 
 ### Problems Faced Booting up (WSL, ollama on windows): 
 1. After the C++ build folder and starting the engine/server, if you follow readme line for line, it doesnt tell you to go back to root directory and run the python commands there. So, virtual enviournment is created inside the build folder.   
@@ -32,3 +31,21 @@ BUG: Readme tells to run ./NeedleDB after building the server/C++ files inside t
 ```
 2. After you have started the C++ server, you will have to open a new terminal to start the application, add a reminder to activate the virtual enviornment in this terminal as well before starting the application.
 3. NOTE: Add a reminder for the developers setup, to open the ollama app once or to check if it is already running in the background, else you will get a timeout error in your first ingestion attempt.
+### Readme v2:
+1. Be fully clear: I wanted to build the test files so i can update the code files with as much freedom as possible, and instantly know, where it fails, so i had to make test files, But i did not create test files, myself, I instructed claude to follow a pattern and give me prompt files, to give to GeminiProExtended, which will make the test files. So, I DID NOT WRITE THE TEST FILES, i only told ai to make them such that each point of failure(expected failure) can be tested easily.
+2. 
+
+## Questions: 
+### About Internals:
+1. What if i change all arrays to std::arrays ? is it a good decision or a bad one ?, even if arrays are rearely used mostly vectors are used.
+2. 
+
+### About Concepts:
+1. Why binary files are much smaller than other file formats like .txt, .json etc
+
+
+
+### Jobs:
+### Command-Parser:
+1. Take string command, parse it down, and fill all elements of a DB_entry. 
+

@@ -73,8 +73,9 @@ public:
     /**
      * @brief Rewrites the persistent binary file to purge all soft-deleted records.
      * @warning Blocks all active I/O operations and requires additional temporary disk space
+     * @return True if the disk update succeeds, false otherwise
      */
-    void compact();
+    bool compact();
     uint64_t get_live_vector_count() const;
     uint64_t get_total_vector_count() const;
 
