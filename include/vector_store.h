@@ -5,6 +5,7 @@
 #include <cstring>
 #include <map>
 #include <iostream>
+#include <span>
 #include <cmath>            // for sqrt
 #include <algorithm>        // for std::sort and std::partial sort
 #include <numeric>          // for std::inner_product (highly optimised dot-product)
@@ -112,6 +113,7 @@ public:
      * @warning Mutates the provided vector directly without allocating a copy
      */
     bool normalise_vector(std::vector<float> &);
+    bool normalise_vector(float *);
     /**
      * @brief Resolves raw integer memory indices back into their string identifiers.
      * @param read_ids Output array populated with the mapped string identifiers
@@ -126,7 +128,8 @@ public:
      * @return True if located in the memory map, false otherwise
      * @warning Executes an unoptimized linear O(N) scan across the ID array
      */
-    bool id_exists(std::string &);
+    bool id_exists(const std::string &) const;
+    bool id_exists(const char *) const;
 
     //  Search-functions
     /**

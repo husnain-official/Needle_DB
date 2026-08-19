@@ -3,18 +3,38 @@
 //--- math and similarity functions ---
 bool Vector_store::normalise_vector(std::vector<float> &vec)
 {
-    double long vec_mag = 0;
-    for (size_t i = 0; i < vec.size(); i++)
-        vec_mag += (vec[i] * vec[i]);
+    long double vec_mag = 0.0;
+    for (const float val : vec)
+        vec_mag += (val * val);
     vec_mag = sqrt(vec_mag);
-    if (vec_mag == 0)
+
+    // Protect against zero or near-zero magnitudes (prevents NaN or Infinity)
+    if (vec_mag < 1e-9)
         return false;
-    // divide each element with magnitude.
-    for (size_t i = 0; i < vec.size(); i++)
-        vec[i] = vec[i] / vec_mag;
-    // we have removed the 'magnitude' of overlap and only 'direction' exists now. Cosine and Dot product same results now.
+
+    float inv_mag = 1.0f / static_cast<float>(vec_mag);
+    for (float &val : vec)
+        val *= inv_mag;
+
     return true;
 }
+bool Vector_store::normalise_vector(float *vec)
+{
+    long double vec_mag = 0.0;
+    for (size_t i = 0; i < schema::DIMENSIONS; i++) // Exception: DB_entry uses float array so rely on schema::
+        vec_mag += (vec[i] * vec[i]);
+    vec_mag = sqrt(vec_mag);
+
+    if (vec_mag < 1e-9)
+        return false;
+
+    float inv_mag = 1.0f / static_cast<float>(vec_mag);
+    for (size_t i = 0; i < schema::DIMENSIONS; i++)
+        vec[i] *= inv_mag;
+
+    return true;
+}
+
 //--- Vector_store implementation
 // 1. getters
 const float *Vector_store::get_embedding(size_t i) const
@@ -264,15 +284,17 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
         similarities.push_back(results[i].similarity);
     }
 }
-bool Vector_store::id_exists(std::string &id_to_check)
+bool Vector_store::id_exists(const std::string &id_to_check) const
 {
-    std::size_t id_in_ram = this->ids_.size();
-    if (id_in_ram == 0)
-        return false;
-    for (size_t i = 0; i < id_in_ram; i++)
+    for (const auto &existing_id : this->ids_)
     {
-        if (id_to_check == ids_[i])
+        if (id_to_check == existing_id)
             return true;
     }
     return false;
+}
+bool Vector_store::id_exists(const char *id_to_check) const
+{
+    size_t id_size = strnlen(id_to_check, schema::ID_LENGTH); // Exception: DB_entry uses c-string so rely on schema::
+    return id_exists(std::string(id_to_check, id_size));
 }

@@ -1,6 +1,6 @@
 #ifndef COMMAND_PARSER
 #define COMMAND_PARSER
-#include "vector_store.h" // For Vector Struct
+#include "vector_store.h" // For 'Parse_result'
 #include "schema.hpp"
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
 class Parser
@@ -57,14 +57,5 @@ private:
      * @warning Sets the delimiter index to std::string::npos if no matching character remains
      */
     void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
-    /**
-     * @brief Scans forward to locate the next assignment delimiter and calculates the advancement stride.
-     * @param command Target string being parsed
-     * @param index Current cursor position within the string
-     * @param next_space_index Output reference updated to the found equals sign position
-     * @param to_move Output reference tracking the substring length
-     * @warning Sets the delimiter index to std::string::npos if no matching character remains
-     */
-    void next_equal_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 };
 #endif

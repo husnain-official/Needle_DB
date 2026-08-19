@@ -79,7 +79,7 @@ struct DB_entry
     uint8_t flag = 1;
     char id[schema::ID_LENGTH]{};
     uint16_t text_length = 0;
-    char text[schema::TEXT_MAX_LENGTH]{};
+    char text[schema::TEXT_MAX_LENGTH]{}; // Question: Since, local models that i can run on ~3Gb Ram, can only embed short paragraphs like 150 words, and i have set max len to 999, how much waste in database i should expect because of padding.
     Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{};
     uint8_t meta_data_count = 0;
     float embeddings[schema::DIMENSIONS]; // Question: If i zero-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
@@ -89,9 +89,9 @@ static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(ui
 struct Vector
 {
     std::string id = std::string(schema::ID_LENGTH, '\0');
-    uint64_t text_offset = 0;
-    uint16_t text_length = 0;
-    Metadata_entry meta_data[3]{};
+    size_t text_offset = 0;
+    size_t text_length = 0;
+    Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{};
     uint8_t meta_data_count = 0;
     std::vector<float> embeddings = std::vector(schema::DIMENSIONS, 0.0f);
 };

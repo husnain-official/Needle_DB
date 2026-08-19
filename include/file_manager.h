@@ -31,7 +31,7 @@ public:
      * @return True upon successful disk flush, false otherwise
      * @warning Does not verify if the string identifier already exists on disk
      */
-    bool write_vector(const std::string &id, const float *data, const Metadata_entry *mdata_arr);
+    bool write_entry(const DB_entry &);
     /**
      * @brief Extracts a specific vector record from disk into active memory.
      * @param index Target sequential record offset
@@ -40,21 +40,21 @@ public:
      * @param mdata_arr Pre-allocated array or nullptr to bypass metadata extraction
      * @return True on success, false if the record contains a tombstone flag or exceeds bounds
      */
-    bool read_vector(uint64_t index, std::string &id_out, float *data_out, Metadata_entry *mdata_arr);
+    bool read_entry(size_t index, DB_entry &);
     /**
      * @brief Marks a persistent disk record as soft-deleted via a tombstone flag.
      * @param index Target sequential record offset
      * @return True if the tombstone bit successfully writes, false on failure
      * @warning Does not reclaim physical disk space
      */
-    bool delete_vector(uint64_t index);
+    bool delete_entry(size_t);
     /**
      * @brief Locates the logical disk offset of a specific string identifier.
      * @param id Target string identifier to search
      * @return Sequential record index, or negative one if unfound
      * @warning Executes an unoptimized O(N) linear scan across the binary file
      */
-    int64_t find_by_id(const std::string &id);
+    int64_t find_by_id(const std::string &);
 
     // Header I/O
     /**
@@ -76,13 +76,14 @@ public:
      * @return True if the disk update succeeds, false otherwise
      */
     bool compact();
-    uint64_t get_live_vector_count() const;
-    uint64_t get_total_vector_count() const;
+    size_t get_live_vector_count() const;
+    size_t get_total_vector_count() const;
 
 private:
     std::fstream file_;
+    const std::string path_;
     DB_header header_;
-    uint64_t record_size_;
+    size_t record_size_;
     /**
      * @brief Computes the absolute physical byte offset for a specific sequential record.
      * @param index Zero-based sequential target record number
@@ -90,7 +91,7 @@ private:
      * @warning Does not validate if the computed offset exceeds actual physical file boundaries
      * @note Assumes the fixed-size binary header immediately precedes all contiguous data records
      */
-    uint64_t get_record_offset(uint64_t index) const;
+    size_t get_record_offset(size_t index) const;
 };
 
 #endif

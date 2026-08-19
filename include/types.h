@@ -48,4 +48,31 @@ struct Query_result
         return (this->similarity > other.similarity);
     }
 };
+
+bool entry_to_vector(const DB_entry &entry, Vector &vec)
+{
+    try
+    {
+        //  ID:
+        size_t id_size = strnlen(entry.id, schema::ID_LENGTH);
+        vec.id = std::string(entry.id, id_size);
+        //  Text length:
+        vec.text_length = entry.text_length;
+        //  Meta-Data:
+        vec.meta_data_count = entry.meta_data_count;
+        for (size_t i = 0; i < entry.meta_data_count; ++i)
+        {
+            // Struct assignment automatically and safely copies the internal char[32] arrays
+            vec.meta_data[i] = entry.meta_data[i];
+        }
+        // Embeddings:
+        std::copy(entry.embeddings, entry.embeddings + schema::DIMENSIONS, vec.embeddings.begin());
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        return false;
+    }
+}
+
 #endif

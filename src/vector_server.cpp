@@ -70,14 +70,14 @@ void Vector_Server::run()
             std::string id_buf;
             Metadata_entry mdata_arr[3];
             std::vector<float> embd_buf(h.dimensions);          // use h.dimensions
-            for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records
+            for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records    // TODO: Specify who is responsible for padding
             {
                 if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
                     continue;                                         // skip deleted (flag=0) — make_entry won't count these
                 vector_store.make_entry(id_buf, embd_buf, mdata_arr); // increments count_ itself
             }
             std::cout << "Auto-loaded " << vector_store.get_count()
-                      << " vectors (" << h.dimensions << " dims) from disk.\n";
+                      << " live vectors (" << h.dimensions << " dims) from disk.\n";
             // prints LIVE vector count, not total-including-deleted
         }
         else
@@ -89,7 +89,7 @@ void Vector_Server::run()
     {
         std::cout << "No data in database found, starting fresh.\n";
     }
-    // Now we first crete out IVF centroids
+    // Now we first crete out IVF centroids // TODO: In v2, the prebuilt centroids are to be stored in a file, and not created after every bootup
     vector_store.attach_index(&ivf_index_);
     ivf_index_.build_(vector_store);
     // Now we allow our port to listen
@@ -117,7 +117,7 @@ void Vector_Server::run()
 }
 void Vector_Server::handle_client(int client_fd)
 {
-    int buffer_len = 16384; // one entry is approximately 4kB
+    int buffer_len = 16384; // one entry is approximately 5.4kB
     int64_t bytes_recv = 0;
     char buffer[buffer_len];
     std::string accumulator; // will accumulate the buffer over all recv calls unitl a '\n'
@@ -154,35 +154,35 @@ void Vector_Server::handle_client(int client_fd)
 
             // std::cout << "Received: " << command << std::endl;
             //------------All Commands Conditionals-----------------
-            if ((command.rfind("INSERT", 0)) == 0) // INSERT ID DIMS key1=abc key2=def key3=xyz F1 F2 F3 ... Fn
+            if ((command.rfind("INSERT", 0)) == 0) // INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
             {
-                Vector v;
-                DB_entry en;
-                Parse_result results = parser.insert_parsing(v, command);
+                // Vector vec;
+                DB_entry entry;
+                Parse_result results = parser.insert_parsing(entry, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (vector_store.id_exists(v.id))
+                if (vector_store.id_exists(entry.id))
                 {
                     results.message = "WARNING <Id already exists in database>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!vector_store.normalise_vector(v.data))
+                if (!vector_store.normalise_vector(entry.embeddings))
                 {
                     results.message = "ERROR <Vector Normalization Failed>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!file_manager.write_vector(v.id, v.data.data(), v.metadata))
+                if (!file_manager.write_entry(entry))
                 {
                     results.message = "ERROR <Vector Writing Failed>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.
+                vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.   // TODO: add a block here to convert into a vector then pass a vector object simple
                 // Notify IVF of the new entry (count_ just incremented, so index = count-1)
                 // if (vector_store.get_count() > 0)
                 //     ivf_index_.add_(vector_store.get_count() - 1);
