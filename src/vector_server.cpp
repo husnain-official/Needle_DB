@@ -67,14 +67,16 @@ void Vector_Server::run()
         if (res.success)
         {
             vector_store.clear(); // reset count_(RAM) to 0, clear arrays
-            std::string id_buf;
-            Metadata_entry mdata_arr[3];
-            std::vector<float> embd_buf(h.dimensions);          // use h.dimensions
+            std::string temp_text_str;
+            DB_entry db_entry;
+            Vector vector_store_entry;
+
             for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records    // TODO: Specify who is responsible for padding
             {
-                if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
-                    continue;                                         // skip deleted (flag=0) — make_entry won't count these
-                vector_store.make_entry(id_buf, embd_buf, mdata_arr); // increments count_ itself
+                if (!file_manager.read_entry(i, db_entry, temp_text_str))
+                    continue; // skip deleted (flag=0) — make_entry won't count these
+                entry_to_vector(db_entry, vector_store_entry);
+                vector_store.make_entry(vector_store_entry); // increments count_ itself
             }
             std::cout << "Auto-loaded " << vector_store.get_count()
                       << " live vectors (" << h.dimensions << " dims) from disk.\n";

@@ -15,7 +15,7 @@ public:
      * @note Expects the exact format: INSERT <id> <dims> [key=val ...] f1 f2 ... fn
      * @warning Fails securely if the dimensional count or string lengths exceed configured limits
      */
-    Parse_result insert_parsing(DB_entry &, const std::string &);
+    Parse_result insert_parsing(DB_entry &, std::string &, const std::string &);
     /**
      * @brief Decodes network queries into actionable search constraints and target embeddings.
      * @param v Vector struct populated with query metadata and floats

@@ -29,13 +29,14 @@ include_directories(include)
 #     add_executable(test_file_manager tests/test_file_manager.cpp src/vector_store.cpp src/file_manager.cpp src/ivf.cpp)
 #     add_executable(test_vector_server tests/test_vector_server.cpp src/vector_store.cpp src/file_manager.cpp src/vector_server.cpp src/command_parser.cpp src/ivf.cpp)
 # endif()
-# 4. Create your test executable
+# 4. Create test executable
 add_executable(command_parser_tests tests/command_parser_tests.cpp src/command_parser.cpp)
-
+add_executable(file_manager_tests tests/file_manager_tests.cpp src/file_manager.cpp)
 
 # 5. Link GoogleTest to your executable
 # Using GTest::gtest_main automatically provides a main() function for your tests
 target_link_libraries(command_parser_tests PRIVATE GTest::gtest_main)
+target_link_libraries(file_manager_tests PRIVATE GTest::gtest_main)
 
 # Link socket libraries (required on some Linux distros)
 # target_link_libraries(NeedleDB pthread)

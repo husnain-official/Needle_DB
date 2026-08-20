@@ -20,7 +20,7 @@ public:
      * @param path Target filesystem path for the persistent database file
      * @warning Throws std::runtime_error if an existing file schema mismatches configuration
      */
-    explicit File_manager(const std::string &path);
+    explicit File_manager(const std::string &path, const std::string &text_path);
 
     // Core operations — all O(1) with fixed record size, except find by id O(n)
     /**
@@ -31,7 +31,7 @@ public:
      * @return True upon successful disk flush, false otherwise
      * @warning Does not verify if the string identifier already exists on disk
      */
-    bool write_entry(const DB_entry &);
+    bool write_entry(const DB_entry &, std::string &);
     /**
      * @brief Extracts a specific vector record from disk into active memory.
      * @param index Target sequential record offset
@@ -40,7 +40,7 @@ public:
      * @param mdata_arr Pre-allocated array or nullptr to bypass metadata extraction
      * @return True on success, false if the record contains a tombstone flag or exceeds bounds
      */
-    bool read_entry(size_t index, DB_entry &);
+    bool read_entry(size_t index, DB_entry &, std::string &);
     /**
      * @brief Marks a persistent disk record as soft-deleted via a tombstone flag.
      * @param index Target sequential record offset
@@ -55,7 +55,6 @@ public:
      * @warning Executes an unoptimized O(N) linear scan across the binary file
      */
     int64_t find_by_id(const std::string &);
-
     // Header I/O
     /**
      * @brief Synchronizes the cached header structure to the beginning of the binary file.
@@ -81,7 +80,9 @@ public:
 
 private:
     std::fstream file_;
+    std::fstream text_file_;
     const std::string path_;
+    const std::string text_file_path_;
     DB_header header_;
     size_t record_size_;
     /**

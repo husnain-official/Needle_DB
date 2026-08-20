@@ -175,6 +175,15 @@ void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_
     if (index_)
         index_->add_(count_ - 1);
 }
+void Vector_store::make_entry(const Vector &vec)
+{
+    ids_.push_back(vec.id);
+    embeddings_.insert(embeddings_.end(), vec.embeddings.begin(), vec.embeddings.end());
+    set_metadata(vec.meta_data, vec.id);
+    count_++;
+    if (index_)
+        index_->add_(count_ - 1);
+}
 bool Vector_store::remove_entry(const std::string &id)
 {
     Parse_result p = get_index_in_ram(id);

@@ -119,7 +119,7 @@
  **/
 
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
-Parse_result Parser::insert_parsing(DB_entry &entry, const std::string &command)
+Parse_result Parser::insert_parsing(DB_entry &entry, std::string &extracted_text, const std::string &command)
 {
     try
     {
@@ -181,7 +181,8 @@ Parse_result Parser::insert_parsing(DB_entry &entry, const std::string &command)
         {
             return {false, "ERROR <Text length mismatch or missing space>\n"};
         }
-        memcpy(entry.text, text.data(), text.size());
+        extracted_text.resize(entry.text_length);
+        memcpy(extracted_text.data(), text.data(), text.size());
 
         //  Check-05 [dimensions]
         index += entry.text_length + 1; // start of <dims>

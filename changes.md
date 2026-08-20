@@ -31,6 +31,21 @@ First seperate the source of schema from the source code, so we can start making
 - file_manager.contract(), written down, now can contract database down to only live vectors after deletion of dead ones.
 - IMPORTANT: File_manager, currently writes the text in 1 entry as well padded upto 999btyes, the original plan was to put the text in another file, not in the same one, CHANGE it.
 
+### 4th:
+1. First of it is to be made clear, why we are writing the text in a seperate file, than the one with other data ? Architecturally speaking it is a bad decision, adds unnecessary complexity, make 1 single read from 1 file into 2 reads from 2 files, and more chances for error, more time. SO, why am i doing this ?
+    - There is not a specific reason, the 1st database is the type where we are storing data and data has a fix max_value so we can easily jump around the file in O(1)
+    - But, there is other cases when we dont have that facility, the data is not of fixed lenght like 'text' is in this case, so this presents a great opportunity for me to try to implement internals of another type of database. 
+    - Conclusion: From my understanding this decision will: 1. More complexity, 2. More error chances, 3. More disk reads.
+    so, its a bad decision, but its my project and i am going to take the option 2. 1 file for all simple data of fix lenght, 2. another for a dynamic length text.
+
+2. Dynamic Database:
+    - Moved text_size and text element from DB_entry to DB_text_entry. 
+    - Updated all write_entry, read_entry, delete_entry, compact, to update both the entry file as well as the text file. 
+    - Moreover, The text file has no header, it jumps straight into the data, its strict scheam is ```<flag><text>```
+    - If one or both the files are deleated and app tries to run, it will silently make both databases and remove all previous data.
+    - Added test file for file_manager.h/cpp
+    
+
 
 
 ### Unexpted Behavior/TO-be-Changed:

@@ -78,13 +78,13 @@ struct DB_entry
 {
     uint8_t flag = 1;
     char id[schema::ID_LENGTH]{};
+    uint64_t text_offset = 0;
     uint16_t text_length = 0;
-    char text[schema::TEXT_MAX_LENGTH]{}; // Question: Since, local models that i can run on ~3Gb Ram, can only embed short paragraphs like 150 words, and i have set max len to 999, how much waste in database i should expect because of padding.
     Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{};
     uint8_t meta_data_count = 0;
-    float embeddings[schema::DIMENSIONS]; // Question: If i zero-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
+    float embeddings[schema::DIMENSIONS]{}; // Question: If i zero-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
 };
-static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + (sizeof(char) * schema::TEXT_MAX_LENGTH) + (sizeof(char) * schema::ID_LENGTH) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
+static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint64_t) + (sizeof(char) * schema::ID_LENGTH) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
 
 struct Vector
 {

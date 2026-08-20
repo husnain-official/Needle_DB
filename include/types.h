@@ -58,6 +58,7 @@ bool entry_to_vector(const DB_entry &entry, Vector &vec)
         vec.id = std::string(entry.id, id_size);
         //  Text length:
         vec.text_length = entry.text_length;
+        vec.text_offset = entry.text_offset;
         //  Meta-Data:
         vec.meta_data_count = entry.meta_data_count;
         for (size_t i = 0; i < entry.meta_data_count; ++i)

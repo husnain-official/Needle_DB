@@ -92,6 +92,7 @@ public:
      * @warning Assumes duplicate ID validation has already occurred prior to invocation
      */
     void make_entry(const std::string, std::vector<float>, const Metadata_entry *);
+    void make_entry(const Vector &);
     /**
      * @brief Executes an O(1) swap-and-pop deletion of a vector from memory.
      * @param id Target vector identifier to permanently remove
