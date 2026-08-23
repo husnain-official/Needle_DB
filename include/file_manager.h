@@ -41,7 +41,7 @@ public:
      * @return True on success, false if the record contains a tombstone flag or exceeds bounds
      */
     bool read_entry(size_t index, DB_entry &, std::string &);
-    bool read_text(const size_t text_length, const size_t text_offset, std::string text);
+    bool read_text(const size_t text_length, const size_t text_offset, std::string &text);
     /**
      * @brief Marks a persistent disk record as soft-deleted via a tombstone flag.
      * @param index Target sequential record offset

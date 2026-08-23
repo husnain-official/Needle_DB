@@ -180,18 +180,20 @@ bool File_manager::delete_entry(size_t index)
     text_file_.flush();
     return text_file_.good();
 }
-bool File_manager::read_text(const size_t text_length, const size_t text_offset, std::string text)
+bool File_manager::read_text(const size_t text_length, const size_t text_offset, std::string &text)
 {
     text_file_.clear();
-    if (text_offset > ((static_cast<size_t>(text_file_.tellp())) - text_length))
-        return "";
+    text_file_.seekp(0, std::ios::end);
+    size_t file_size = static_cast<size_t>(text_file_.tellp());
+    if (text_offset > file_size or text_length > file_size - text_length)
+        return false;
     // Move to offset
     text_file_.seekg(text_offset);
     // Read the flag
     char flag = 0;
     text_file_.read(&flag, 1);
-    if (!flag)
-        throw std::runtime_error("[File_manager()] | Flag mismatch of text and entry.");
+    if (!text_file_.good() or flag == 0)
+        return false;
     // Read the text
     text.resize(text_length);
     text_file_.read(reinterpret_cast<char *>(text.data()), text_length);

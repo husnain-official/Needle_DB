@@ -187,7 +187,7 @@ bool Vector_store::remove_entry(const std::string &id)
     // 2.1. Swap data
     std::swap(ids_[target], ids_[last]);
     std::swap(text_lengths_[target], text_lengths_[last]);
-    std::swap(text_offsets_[target], text_lengths_[last]);
+    std::swap(text_offsets_[target], text_offsets_[last]);
 
     // 2.2. Swap embedding blocks in the flat array
     float *target_block = embeddings_.data() + (target * dims_);
@@ -197,7 +197,7 @@ bool Vector_store::remove_entry(const std::string &id)
     // 3. Pop the last entry
     ids_.pop_back();
     text_lengths_.pop_back();
-    text_lengths_.pop_back();
+    text_offsets_.pop_back();
     embeddings_.resize(embeddings_.size() - dims_);
 
     // 4. Delete metadata

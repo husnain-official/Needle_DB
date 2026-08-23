@@ -161,7 +161,7 @@ void Vector_Server::handle_client(int client_fd)
                 Vector vector_entry;
                 DB_entry entry;
                 std::string text;
-                Parse_result results = parser.insert_parsing(entry, command, text);
+                Parse_result results = parser.insert_parsing(entry, text, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -247,7 +247,12 @@ void Vector_Server::handle_client(int client_fd)
                 // now return the id's of top_k similar vectors
                 results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
                 send(client_fd, results.message.data(), results.message.length(), 0);
-                vector_store.read_all_ids(id, index, top_k);
+                if (!vector_store.read_all_ids(id, index, top_k))
+                {
+                    results.message = "ERROR <[Vector-Store] Failed to read similar id's.>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
                 std::string text;
                 for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n, this for mat now has to change // new format: <id> <score> <text>
                 {
@@ -255,7 +260,7 @@ void Vector_Server::handle_client(int client_fd)
                     size_t text_offset = vector_store.get_text_offset(index[i]);
                     if (!file_manager.read_text(text_length, text_offset, text))
                     {
-                        results.message = "ERROR <SKIPPING possible match. Could not read text for entry with id '" + id[i] + "'>";
+                        results.message = "ERROR <SKIPPING possible match, Flag mismatch of text and entry. '" + id[i] + "'>";
                         send(client_fd, results.message.data(), results.message.length(), 0);
                         continue;
                     }
@@ -289,17 +294,12 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                // Get RAM index before removing (needed for IVF)
-                int64_t idx = vector_store.get_index_in_ram(id);
-                size_t ram_idx = idx != -1 ? idx : SIZE_MAX;
                 if (!vector_store.remove_entry(id))
                 {
                     results.message = "ERROR <Could not delete vector(Memory)\n>";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (ram_idx != SIZE_MAX) // IS THIS NOT REPETATIVE AS IN vector_store.remove_entry, it does the exact same thing, verify !
-                    ivf_index_.delete_(ram_idx);
                 results.message = "DELETE <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
