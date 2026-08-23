@@ -92,7 +92,7 @@ void Vector_Server::run()
         std::cout << "No data in database found, starting fresh.\n";
     }
     // Now we first crete out IVF centroids // TODO: In v2, the prebuilt centroids are to be stored in a file, and not created after every bootup
-    vector_store.attach_index(&ivf_index_);
+    vector_store.attach_index(&ivf_index_); // A better decision will be to move this into a composition with vector_store, constructor of vector_store also creates a ivf_index.
     ivf_index_.build_(vector_store);
     // Now we allow our port to listen
     if ((listen(server_fd, BACKLOG)) == -1)
@@ -158,9 +158,10 @@ void Vector_Server::handle_client(int client_fd)
             //------------All Commands Conditionals-----------------
             if ((command.rfind("INSERT", 0)) == 0) // INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
             {
-                // Vector vec;
+                Vector vector_entry;
                 DB_entry entry;
-                Parse_result results = parser.insert_parsing(entry, command);
+                std::string text;
+                Parse_result results = parser.insert_parsing(entry, command, text);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -178,22 +179,25 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!file_manager.write_entry(entry))
+                if (!file_manager.write_entry(entry, text))
                 {
-                    results.message = "ERROR <Vector Writing Failed>\n";
+                    results.message = "ERROR <Entry Writing Failed>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.   // TODO: add a block here to convert into a vector then pass a vector object simple
-                // Notify IVF of the new entry (count_ just incremented, so index = count-1)
-                // if (vector_store.get_count() > 0)
-                //     ivf_index_.add_(vector_store.get_count() - 1);
+                if (!entry_to_vector(entry, vector_entry))
+                {
+                    results.message = "ERROR <'DB_entry' to 'Vector' conversion Failed>\n";
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                vector_store.make_entry(vector_entry); // update the RAM as well, the store updates the index_ as well.
                 results.message = "INSERT <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS key1=abc key2=def key3=xyz F1 F2 ... Fn
+            else if ((command.rfind("QUERY", 0)) == 0) // QUERY <top-k> <dims> [key=val ...] f1 f2 ... fn
             {
                 Vector query_v;
                 size_t top_k = 0;
@@ -203,15 +207,15 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!vector_store.normalise_vector(query_v.data))
+                if (!vector_store.normalise_vector(query_v.embeddings))
                 {
                     results.message = "ERROR <Vector Normalization Failed>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                //
+                // Meta-data based searching.
                 std::vector<size_t> matching_index;
-                results = vector_store.get_matching_indices(query_v.metadata, matching_index);
+                results = vector_store.get_matching_indices(query_v.meta_data, query_v.meta_data_count, matching_index);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
@@ -231,7 +235,7 @@ void Vector_Server::handle_client(int client_fd)
                     std::vector<size_t> filtered;
                     for (size_t c : ivf_candidates)
                     {
-                        if (matching_index.empty() ||
+                        if (matching_index.empty() or
                             std::find(matching_index.begin(), matching_index.end(), c) != matching_index.end())
                             filtered.push_back(c);
                     }
@@ -244,15 +248,24 @@ void Vector_Server::handle_client(int client_fd)
                 results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 vector_store.read_all_ids(id, index, top_k);
-                for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
+                std::string text;
+                for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n, this for mat now has to change // new format: <id> <score> <text>
                 {
-                    results.message = id[i] + " " + std::to_string(similarities[i]) + "\n";
+                    size_t text_length = vector_store.get_text_length(index[i]);
+                    size_t text_offset = vector_store.get_text_offset(index[i]);
+                    if (!file_manager.read_text(text_length, text_offset, text))
+                    {
+                        results.message = "ERROR <SKIPPING possible match. Could not read text for entry with id '" + id[i] + "'>";
+                        send(client_fd, results.message.data(), results.message.length(), 0);
+                        continue;
+                    }
+                    results.message = id[i] + " " + std::to_string(similarities[i]) + " " + text + "\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                 }
                 send(client_fd, "END\n", 4, 0);
                 continue;
             }
-            else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
+            else if ((command.rfind("DELETE", 0)) == 0) // DELETE <id>
             {
                 std::string id = "";
                 Parse_result results;
@@ -266,26 +279,26 @@ void Vector_Server::handle_client(int client_fd)
                 index = file_manager.find_by_id(id);
                 if (index == -1)
                 {
-                    results.message = "ERROR <Could not find vector>\n";
+                    results.message = "ERROR <Could not find vector to delete in Database>\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
+                if (!file_manager.delete_entry(static_cast<uint64_t>(index)))
                 {
                     results.message = "ERROR <Could not delete vector(Database)\n>";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
                 // Get RAM index before removing (needed for IVF)
-                Parse_result idx_res = vector_store.get_index_in_ram(id);
-                size_t ram_idx = idx_res.success ? std::stoul(idx_res.message) : SIZE_MAX;
+                int64_t idx = vector_store.get_index_in_ram(id);
+                size_t ram_idx = idx != -1 ? idx : SIZE_MAX;
                 if (!vector_store.remove_entry(id))
                 {
                     results.message = "ERROR <Could not delete vector(Memory)\n>";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (ram_idx != SIZE_MAX)
+                if (ram_idx != SIZE_MAX) // IS THIS NOT REPETATIVE AS IN vector_store.remove_entry, it does the exact same thing, verify !
                     ivf_index_.delete_(ram_idx);
                 results.message = "DELETE <Successful>\n";
                 results.message = "OK\n";
@@ -315,28 +328,28 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                // do load things
-                { // as this is the connection point for all three classes, code will be here
-                    DB_header h = file_manager.read_header();
-                    results = vector_store.set_dims_(schema::DIMENSIONS);
-                    if (!results.success)
-                    {
-                        send(client_fd, results.message.data(), results.message.length(), 0);
-                        continue;
-                    }
-                    vector_store.clear();
-                    // read and write
-                    std::string id_buf;
-                    std::vector<float> embd_buf(schema::DIMENSIONS);
-                    Metadata_entry mdata_arr[h.max_kv];
-                    for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
-                    {
-                        if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
-                            continue;                                         // skip deleted (flag=0) or bad records
-                        vector_store.make_entry(id_buf, embd_buf, mdata_arr); // this increments count itself
-                    }
-                    ivf_index_.build_(vector_store);
+                DB_header h = file_manager.read_header();
+                results = vector_store.set_dims_(schema::DIMENSIONS);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
                 }
+                vector_store.clear();
+                // read and write
+                std::string text;
+                DB_entry entry;
+                Vector vec_entry;
+                for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
+                {
+                    text.clear();
+                    if (!file_manager.read_entry(i, entry, text))
+                        continue;
+                    entry_to_vector(entry, vec_entry);
+                    vector_store.make_entry(vec_entry);
+                }
+                ivf_index_.build_(vector_store);
+
                 results.message = "LOAD <Successful>\n";
                 results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);

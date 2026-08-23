@@ -20,7 +20,7 @@ FetchContent_MakeAvailable(googletest)
 include_directories(src)
 include_directories(include)   
 #   
-# add_executable(NeedleDB src/main.cpp src/vector_store.cpp src/file_manager.cpp src/vector_server.cpp src/command_parser.cpp src/ivf.cpp)
+add_executable(NeedleDB src/main.cpp src/vector_store.cpp src/file_manager.cpp src/vector_server.cpp src/command_parser.cpp src/ivf.cpp)
 
 #   Test-Suite
 # option(BUILD_TESTS "Build test executables" OFF)
@@ -39,4 +39,4 @@ target_link_libraries(command_parser_tests PRIVATE GTest::gtest_main)
 target_link_libraries(file_manager_tests PRIVATE GTest::gtest_main)
 
 # Link socket libraries (required on some Linux distros)
-# target_link_libraries(NeedleDB pthread)
+target_link_libraries(NeedleDB pthread)

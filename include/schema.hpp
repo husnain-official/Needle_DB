@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 /*
     1. DE_entry and Vector both have many overlapping elements, but they are different as they are used for seperate purposes and places.
         DB_entry usage is limited to file_manager's internals.
@@ -82,7 +83,7 @@ struct DB_entry
     uint16_t text_length = 0;
     Metadata_entry meta_data[schema::META_DATA_KP_PAIRS]{};
     uint8_t meta_data_count = 0;
-    float embeddings[schema::DIMENSIONS]{}; // Question: If i zero-initilize it as {'\0'},  will it effect performance as each entry will have to first set this value to all of embeddings bytes
+    float embeddings[schema::DIMENSIONS]{};
 };
 static_assert(sizeof(DB_entry) == (sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint64_t) + (sizeof(char) * schema::ID_LENGTH) + (schema::DIMENSIONS) * sizeof(float) + (sizeof(Metadata_entry) * schema::META_DATA_KP_PAIRS)), "[schema.hpp]    |    Entry layout mismatch.");
 

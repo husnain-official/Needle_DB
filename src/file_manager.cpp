@@ -90,16 +90,15 @@ bool delete_file(const std::string &filepath)
     return success;
 }
 // --- Core-Operations
-bool File_manager::write_entry(const DB_entry &entry, std::string &text)
+bool File_manager::write_entry(DB_entry &entry, std::string &text)
 {
     // NOTE: Responsibility of caller to use a fresh/new entry refrence
-    DB_entry entry_copy = entry;
     // --- Text-DB ---
     // Setup
     text_file_.clear();
     // Move to eof
     text_file_.seekp(0, std::ios::end);
-    entry_copy.text_offset = text_file_.tellp();
+    entry.text_offset = text_file_.tellp();
     // Flag writing
     text_file_.write(reinterpret_cast<const char *>(&entry.flag), 1);
     if (!text_file_.good())
@@ -111,7 +110,7 @@ bool File_manager::write_entry(const DB_entry &entry, std::string &text)
     // --- Entry-DB ---
     file_.clear();
     file_.seekp(0, std::ios::end);
-    file_.write(reinterpret_cast<const char *>(&entry_copy), sizeof(DB_entry));
+    file_.write(reinterpret_cast<const char *>(&entry), sizeof(DB_entry));
     if (!file_.good())
         return false;
     // Clean-up
@@ -179,6 +178,23 @@ bool File_manager::delete_entry(size_t index)
     text_file_.seekp(entry_read.text_offset);
     text_file_.write(&flag, 1);
     text_file_.flush();
+    return text_file_.good();
+}
+bool File_manager::read_text(const size_t text_length, const size_t text_offset, std::string text)
+{
+    text_file_.clear();
+    if (text_offset > ((static_cast<size_t>(text_file_.tellp())) - text_length))
+        return "";
+    // Move to offset
+    text_file_.seekg(text_offset);
+    // Read the flag
+    char flag = 0;
+    text_file_.read(&flag, 1);
+    if (!flag)
+        throw std::runtime_error("[File_manager()] | Flag mismatch of text and entry.");
+    // Read the text
+    text.resize(text_length);
+    text_file_.read(reinterpret_cast<char *>(text.data()), text_length);
     return text_file_.good();
 }
 bool File_manager::compact()

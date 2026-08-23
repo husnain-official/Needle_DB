@@ -16,7 +16,7 @@
 #include <string>
 #include <cstring>
 #include <iostream>
-#include "schema.h"         // for schema-refrence
+#include "schema.hpp"       // for schema-refrence
 #include "vector_store.h"   // for RAM updates/access
 #include "file_manager.h"   // for file/database updates/access
 #include "similarities.hpp" // for similarity searches

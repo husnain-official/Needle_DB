@@ -76,7 +76,7 @@ public:
      * @return Unrooted scalar representing the squared Euclidean distance
      * @warning Omits the final square root operation for optimization purposes
      */
-    float euclidean_distance(const float *v1, const float *v2, size_t dims) const;
+    float euclidean_distance(const float *v1, const float *v2) const;
     /**
      * @brief Computes the squared L2 distance between two standard vector objects.
      * @param v1 First floating-point sequence

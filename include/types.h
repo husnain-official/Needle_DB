@@ -15,7 +15,8 @@
 struct Config
 {
     std::string port = "8080";
-    std::string vecdb_file_path = "./data/database.vdb";
+    std::string vecdb_entry_file_path = "./data/database.vdb";
+    std::string vecdb_text_file_path = "./data/database_text.vdb";
     std::size_t dims = 1024;
     std::size_t dims_no_of_digits = 4;
     std::size_t id_length = 32;
@@ -49,7 +50,7 @@ struct Query_result
     }
 };
 
-bool entry_to_vector(const DB_entry &entry, Vector &vec)
+inline bool entry_to_vector(const DB_entry &entry, Vector &vec)
 {
     try
     {
@@ -76,4 +77,4 @@ bool entry_to_vector(const DB_entry &entry, Vector &vec)
     }
 }
 
-#endif
+#endif // TYPES

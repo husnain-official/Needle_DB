@@ -1,6 +1,23 @@
-## Building Debugging tools:
-### Quick-Overview of variables:
-1.
+## Review/Thoughts:
+### vector-store.cpp
+1.  When is get_index_in_ram() used ? 
+    - In vector_store.remove_entry()
+    - In vector_server.handle_client() ... QUERY section we extract the index, then we delete it the entry in RAM, then use the extracted index to remove form ivf clustus.
+    - In ivf.delete(), the return value of this is used.
+2. Get matching_index() is a extremely poor written function, try to improve it later.
+3. Now, store will get a refrence of a index and it will be responsible for ending its life cycle, as it is to be noted, the store must outlive the index or co-destruct.
+4. 
+
+### vector-server.cpp
+1. Why does a server/manager file creating a ivf object and passing it to the vector_store, poor design, change such that store is responsible for creating a index and also managing/deleting it . 
+2. Make a clear section and note explicitly that server will be creating the index, why ? Because, the the constructor/1-line, will be changed and the type of index created will be changed as well, all other classes are only required to work along a refrence given to them, this makes changing to other algorithms in the future extermely simple, but is hard to explain to someone for the 1st time.
+3. DOCUMENT CLEARLY: we need the text_offset to store in the RAM, but we only acquire it in server.write_entry(), so making the parameter entry a non-const so we can use it to store it.
+4. 
+
+### file-manager.cpp
+1. When is find_by_id() used ?
+    - Only once, in vector_server.handle_client() ... DELETE, to find the index to call file_manager.delete_entry().
+
 
 ### Rants:
 1. What is id_length, kv_length, header_length ? What length, rename it all to size. ITS HOW MUCH SIZE THEY ARE USING IN MEMORY NOT LENGTH 

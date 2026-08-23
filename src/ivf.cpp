@@ -2,10 +2,10 @@
 
 // Fixed Euclidean distance: Computes squared L2 distance (avoids costly sqrt)
 // Overloaded to accept raw pointers for high-performance tight loops
-float IVF_index::euclidean_distance(const float *v1, const float *v2, size_t dims) const
+float IVF_index::euclidean_distance(const float *v1, const float *v2) const
 {
     float distance = 0;
-    for (size_t i = 0; i < dims; i++)
+    for (size_t i = 0; i < schema::DIMENSIONS; i++)
     {
         float diff = v1[i] - v2[i];
         distance += (diff * diff); // Squaring the difference correctly
@@ -14,7 +14,7 @@ float IVF_index::euclidean_distance(const float *v1, const float *v2, size_t dim
 }
 float IVF_index::euclidean_distance(const std::vector<float> &v1, const std::vector<float> &v2) const
 {
-    return euclidean_distance(v1.data(), v2.data(), v1.size());
+    return euclidean_distance(v1.data(), v2.data());
 }
 
 void IVF_index::build_(Vector_store &store)
@@ -90,7 +90,7 @@ void IVF_index::build_(Vector_store &store)
 
 std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 {
-    if (!store_ref || lists.empty())
+    if (!store_ref or lists.empty())
         return {};
 
     size_t dims = schema::DIMENSIONS;
@@ -101,7 +101,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 
     for (size_t i = 0; i < centroid_count; i++)
     {
-        float dist = euclidean_distance(query.data.data(), centroids.data() + (i * dims), dims);
+        float dist = euclidean_distance(query.embeddings.data(), centroids.data() + (i * dims));
         centroid_dists.push_back({dist, i});
     }
 
@@ -118,7 +118,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
         {
             const float *vec = store_ref->get_embedding(v_idx);
             // We use dot_similarity here to match standard VectorStore logic (assuming normalized vectors)
-            float sim = dot_similarity(query.data, vec);
+            float sim = dot_similarity(query.embeddings, vec);
             candidates.push_back({sim, v_idx});
         }
     }
@@ -141,7 +141,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 
 void IVF_index::add_(std::size_t index)
 {
-    if (!store_ref || centroids.empty() || lists.empty())
+    if (!store_ref or centroids.empty() or lists.empty())
         return;
 
     size_t dims = schema::DIMENSIONS;
@@ -174,7 +174,7 @@ size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
 
     for (size_t i = 0; i < centroid_count; i++)
     {
-        float dist = euclidean_distance(vec, centroids.data() + (i * dims), dims);
+        float dist = euclidean_distance(vec, centroids.data() + (i * dims));
         if (dist < best_dist)
         {
             best_dist = dist;
