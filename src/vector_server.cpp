@@ -253,9 +253,10 @@ void Vector_Server::handle_client(int client_fd)
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                std::string text;
+
                 for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n, this for mat now has to change // new format: <id> <score> <text>
                 {
+                    std::string text;
                     size_t text_length = vector_store.get_text_length(index[i]);
                     size_t text_offset = vector_store.get_text_offset(index[i]);
                     if (!file_manager.read_text(text_length, text_offset, text))
