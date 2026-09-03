@@ -185,7 +185,7 @@ bool File_manager::read_text(const size_t text_length, const size_t text_offset,
     text_file_.clear();
     text_file_.seekp(0, std::ios::end);
     size_t file_size = static_cast<size_t>(text_file_.tellp());
-    if (text_offset > file_size or text_length > file_size - text_length)
+    if (text_offset > file_size || (file_size - text_offset) < (text_length + 1))
         return false;
     // Move to offset
     text_file_.seekg(text_offset);

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <cmath>
+#include <algorithm>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -32,10 +33,12 @@ protected:
     uint16_t port_;
     Config config_;
 
-    std::unique_ptr<File_manager> fm_;
-    std::unique_ptr<Vector_store> vs_;
-    std::unique_ptr<Vector_Server> server_;
-    std::thread server_thread_; // FIX: Member thread to manage lifecycle
+    // NOTE: raw, intentionally-never-freed pointers -- not unique_ptr. See the
+    // long comment in SetUp() for why owning these via the fixture (whose
+    // lifetime ends after every single TEST_F) is unsafe here.
+    File_manager *fm_ = nullptr;
+    Vector_store *vs_ = nullptr;
+    Vector_Server *server_ = nullptr;
 
     void SetUp() override
     {
@@ -52,16 +55,39 @@ protected:
         config_.vecdb_entry_file_path = entry_path_;
         config_.vecdb_text_file_path = text_path_;
 
-        fm_ = std::make_unique<File_manager>(entry_path_, text_path_);
-        vs_ = std::make_unique<Vector_store>();
-        server_ = std::make_unique<Vector_Server>(config_.port, *vs_, *fm_, config_);
+        // Vector_Server::run() never returns under normal operation -- it loops
+        // accept() -> handle_client() forever, and the only exit path is a fatal
+        // listen() failure calling exit(1). The class has no graceful shutdown
+        // API. That means whatever thread we spawn below to run it will still be
+        // blocked inside run() long after this fixture -- and this test -- have
+        // finished.
+        //
+        // Given that, fm_/vs_/server_ are deliberately heap-allocated here and
+        // never deleted, instead of being owned by unique_ptr fixture members.
+        // If they were unique_ptr members (as before), they'd be destroyed at
+        // the end of *this* TEST_F, while the detached thread spawned below is
+        // still alive and permanently looping inside that same, now-freed
+        // Vector_Server -- a use-after-free on every subsequent accept()
+        // iteration. That's undefined behavior, and a very plausible source of
+        // the garbage/repeating terminal output this was producing. Leaking
+        // them intentionally keeps them valid for the life of the test binary,
+        // which is the only safe option given the server has no shutdown hook.
+        fm_ = new File_manager(entry_path_, text_path_);
+        vs_ = new Vector_store();
+        server_ = new Vector_Server(config_.port, *vs_, *fm_, config_);
 
         ASSERT_TRUE(server_->setup()) << "Server failed to bind socket to port " << port_;
 
-        // FIX: Store the thread and join it later to prevent use-after-free
-        // and the resulting "accept: Bad file descriptor" spam loop.
-        server_thread_ = std::thread([this]()
-                                     { server_->run(); });
+        // Detached, never joined: run() does not return under normal operation,
+        // so join()-ing it here would hang the test process forever (and did,
+        // before this fix -- see TearDown). This leaks one permanently-running
+        // thread per test for the rest of the process's life. That's a known,
+        // accepted tradeoff of Vector_Server's current design (no graceful
+        // shutdown exists today) -- not something this test file should work
+        // around by changing server code.
+        std::thread([this]()
+                     { server_->run(); })
+            .detach();
 
         // Probe-connect to ensure the server thread has reached listen() before we proceed
         int probe_fd = connect_client(port_);
@@ -71,17 +97,12 @@ protected:
 
     void TearDown() override
     {
-        if (server_)
-        {
-            server_->stop(); // Closes server_fd, interrupting the block
-        }
-
-        // FIX: Ensure the thread cleanly exits before the fixture destructs
-        if (server_thread_.joinable())
-        {
-            server_thread_.join();
-        }
-
+        // Deliberately no server_->stop()/thread join here -- see the comment in
+        // SetUp(). The detached server thread (and the fm_/vs_/server_ objects
+        // it references) are intentionally left running/allocated for the rest
+        // of the process. Each test used its own port and its own temp files,
+        // so a still-running previous test's server never interferes with a
+        // later test; only the on-disk files need cleaning up.
         CleanUpFiles();
     }
 
@@ -348,13 +369,41 @@ TEST_F(VectorServerIntegrationTest, Query_TopKExceedsMax_ClampsToMax)
     int client_fd = connect_client(port_);
     ASSERT_GE(client_fd, 0);
 
+    // The clamp can only be observed if MORE than schema::MAX_K_SIMILAR live
+    // vectors actually exist. With an empty (or under-filled) database, the
+    // result count is bounded by how much data exists, not by the clamp --
+    // as the passing Query_EmptyDatabase_ReturnsZeroResults test above proves
+    // (it requests top_k=5 against zero vectors and gets back "QUERY <0>",
+    // i.e. the header reflects the real result count, not the raw request).
+    // An earlier version of this test queried an empty database and could
+    // never have told "clamped to MAX_K_SIMILAR" apart from "clamped to the
+    // 0 results that actually exist" -- that was a bug in the test, not the
+    // server.
+    const size_t insert_count = schema::MAX_K_SIMILAR + 5;
+    for (size_t i = 0; i < insert_count; i++)
+    {
+        send_command(client_fd, BuildInsertCommand("clamp_id_" + std::to_string(i), "Txt"));
+        EXPECT_EQ(read_response(client_fd), "OK\n");
+    }
+
     size_t requested_k = schema::MAX_K_SIMILAR + 10;
     send_command(client_fd, BuildQueryCommand(requested_k));
-    std::string response = read_response(client_fd);
+    // Larger timeout: MAX_K_SIMILAR+ result lines take longer to arrive than
+    // the default 200ms budget assumes.
+    std::string response = read_response(client_fd, 500);
 
     std::string expected_header = "QUERY <" + std::to_string(schema::MAX_K_SIMILAR) + ">\n";
     EXPECT_TRUE(response.starts_with(expected_header))
         << "Server failed to clamp top_k response header to schema::MAX_K_SIMILAR";
+
+    // Also verify the actual number of result lines is clamped, not just the
+    // header number -- these could disagree if only the header math were
+    // fixed without touching the actual result-producing loop.
+    size_t total_lines = std::count(response.begin(), response.end(), '\n');
+    ASSERT_GE(total_lines, 2u) << "Response too short to contain header + END";
+    size_t result_lines = total_lines - 2; // minus header line and "END\n"
+    EXPECT_EQ(result_lines, schema::MAX_K_SIMILAR)
+        << "Number of result lines was not clamped to schema::MAX_K_SIMILAR";
 
     close(client_fd);
 }

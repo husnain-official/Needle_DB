@@ -1,69 +1,65 @@
-## Changes-Made:
-### SSOT for Schema(Header & Entry):
-First seperate the source of schema from the source code, so we can start making the tests.
-1. Removed Header from file_manager.h
-2. Removed meta_data form types.h
-3. In file_manager's constructor:
-    previously: we passed the schema through parameters
-    now: the header is build with data directly from the namespace schema
-    what this means: 
-        1. We dont have to manually send parameters, 
-        2. We dont have to set values to the header, but a file_manager creates its own header, and after construction it already has correct data in it.
-4. Got updated:
-    -> File_manager()
-    -> Deleted:     env_config.hpp 
-    -> Removed config instances dependency from each file and shifted to direct use of constexprs from schema.hpp
-5. Did not remove the ssot data from the .env file as python side still uses it, but engine is fully free from it and only reads .env for path and port
-
-### command-parser:
-1. Updated the command_parser to the new command formats.
-2. Moved 'Vector' struct form types.hpp to schema.hpp
-1. **COMMAND-PARSER**:  (Either change or document)
-- Why does insert does not check for duplicates equal signs in key=value while query does ? (Fixed.)
-- Why does SAVE/LOAD allow S A V E and L O A D.     (Fixed.)
-
-### schema, file-manager:
-1. New Rule to be followed: Vector_store and any other files which are ram only will use fully automated structures like string and vectors.
-2. New Rule: Only those will use raw arrays, c-strings, POD, which are to be fully turned into binary and stored in one go, Like DB_header, DB_entry.
-3. Update: 
-- Replaced old write_entry() with new version, which dumps the entire struct in one go instead of validating/padding and doing things that are not its responsibility.
-- Replaced old read_entry() with new version, now reads the flag first and returns if dead else reads the reast in 1 go.
-- file_manager.contract(), written down, now can contract database down to only live vectors after deletion of dead ones.
-- IMPORTANT: File_manager, currently writes the text in 1 entry as well padded upto 999btyes, the original plan was to put the text in another file, not in the same one, CHANGE it.
-
-### file-manager:
-1. First of it is to be made clear, why we are writing the text in a seperate file, than the one with other data ? Architecturally speaking it is a bad decision, adds unnecessary complexity, make 1 single read from 1 file into 2 reads from 2 files, and more chances for error, more time. SO, why am i doing this ?
-    - There is not a specific reason, the 1st database is the type where we are storing data and data has a fix max_value so we can easily jump around the file in O(1)
-    - But, there is other cases when we dont have that facility, the data is not of fixed lenght like 'text' is in this case, so this presents a great opportunity for me to try to implement internals of another type of database. 
-    - Conclusion: From my understanding this decision will: 1. More complexity, 2. More error chances, 3. More disk reads.
-    so, its a bad decision, but its my project and i am going to take the option 2. 1 file for all simple data of fix lenght, 2. another for a dynamic length text.
-
-2. Dynamic Database:
-    - Moved text_size and text element from DB_entry to DB_text_entry. 
-    - Updated all write_entry, read_entry, delete_entry, compact, to update both the entry file as well as the text file. 
-    - Moreover, The text file has no header, it jumps straight into the data, its strict scheam is ```<flag><text>```
-    - If one or both the files are deleated and app tries to run, it will silently make both databases and remove all previous data.
-    - Added test file for file_manager.h/cpp
-
-### 5th:
-1. functions/logic updated to match other files, in INSERT, DELETE, SAVE, LOAD. QUERY is still remaining.
-2. NOTE: in the previous commit: In vector_store::normalise_vector(), updated the logic to replace division by multiplication and added safety against infinite or NaN values. 
-3. NOTE: not a change but a reminder: Currently both indices of the database and vector_store(RAM), are not parallel.
-4. Added const correctness in getter functions of vector_store class.
-5. Removed Dead-code from vector_store.cpp
-6. Updated some function parametes in ivf.cpp
-7. Added 2 more paralled arrays in vector_store class for text_lengths and text_offsets for O(1) reads on text in query done by server, added them in add/delete entry, and other member function where needed.
-8. Updated QUERY to follow the format: <id> <similarity> <text>\n
-9. Added read_text() in file_manager() to use the text lenght/offset to make text extraction a O(1)
-10. DOCUMENT CLEARLY: we need the text_offset to store in the RAM, but we only acquire it in server.write_entry(), so making the parameter entry a non-const so we can use it to store it.
 
 
 
-### Unexpted Behavior/TO-be-Changed:
-1. **COMMAND-PARSER**:  (Either change or document)
-- 
-2. **FILE-MANAGER**:
-- compact(), might corrupt the files if the system shuts down while in function.
-- constructor will destroy working data, if either one of the files is deletead, as to silently start over, DOCUMENT, and later switch to a throw runtime error. 
 
 
+
+
+
+
+
+
+
+
+
+
+> **Note on AI Generation:** All of the following text is written by AI to maintain a compact and detailed format. If you want to read the original, non-AI wording and follow the author's exact thought process, please revert to the commit made on 23/8/26.
+
+### SSOT for Schema (Header & Entry)
+* A Single Source of Truth (SSOT) was established for the schema by separating it from the source code, enabling easier testing.
+* The `Header` and `meta_data` were removed from `file_manager.h` and `types.h`, respectively.
+* The `file_manager` constructor now automatically builds its own header using data directly from the schema namespace instead of relying on manually passed parameters.
+* The `env_config.hpp` file was deleted. The engine no longer relies on config instances and instead directly uses `constexprs` from `schema.hpp`.
+* The `.env` file is now only read for the path and port by the engine, though the Python side still relies on the SSOT data there.
+
+### Command-Parser
+* The command parser was updated to handle new command formats.
+* The `Vector` struct was relocated from `types.hpp` to `schema.hpp`.
+* Fixed a bug where `insert` did not check for duplicate equal signs in key=value pairs (unlike `query`).
+* Fixed an issue where `SAVE` and `LOAD` incorrectly allowed spaced-out characters (e.g., S A V E).
+
+### Schema, File-Manager
+* **New Rule:** RAM-only files (like `Vector_store`) must use automated structures like vectors and strings.
+* **New Rule:** Binary storage components must use raw arrays, c-strings, and PODs to allow for one-go memory dumping.
+* `write_entry()` was replaced with a new version that dumps the entire struct at once, removing validation and padding logic that falls outside its responsibility.
+* `read_entry()` was updated to read the status flag first, aborting if the entry is dead, or reading the rest in one go if alive.
+* The `contract()` function was implemented to compress the database down to only live vectors by removing dead ones.
+* Identified an architectural flaw to be changed: text was originally being written into the same entry file and padded up to 999 bytes, which will be separated.
+
+### File-Manager (Dynamic Database)
+* Fixed-length data and dynamic-length text are now separated into two different files. While this adds complexity and disk reads, it was deliberately chosen to practice implementing dynamic database internals.
+* Text elements and sizes were moved from `DB_entry` to a new `DB_text_entry`.
+* All core functions (`write_entry`, `read_entry`, `delete_entry`, `compact`) were updated to support both files.
+* The dedicated text file operates without a header using a strict `<flag><text>` schema.
+* If one or both database files are missing, the app will silently create new ones and destroy previous data.
+* A test file for `file_manager.h/.cpp` was added.
+
+### 5th (Commit)
+* Logic was updated across `INSERT`, `DELETE`, `SAVE`, and `LOAD` to match the new file structure (with `QUERY` remaining).
+* In `vector_store::normalise_vector()`, division was swapped for multiplication, and safeguards against infinite or NaN values were introduced.
+* **Reminder:** The indices of the database and the RAM `vector_store` are currently not parallel.
+* Getter functions in the `vector_store` class received const correctness, and dead code was removed.
+* Function parameters in `ivf.cpp` were updated.
+* Added two parallel arrays (`text_lengths` and `text_offsets`) to `vector_store` for O(1) text reads during server queries.
+* The `QUERY` format was updated to output as `<id> <similarity> <text>\n`.
+* Added `read_text()` in `file_manager()` to extract text in O(1) time using text lengths and offsets.
+* The entry parameter in `server.write_entry()` was made non-const so the system can acquire and store the `text_offset` in RAM.
+
+### 6th (Commit)
+* Full integration and unit test files have been created to test each file and their integrations. 
+* Fixed a bug in the `file_manager.read_text()` condition regarding when to return an error.
+* **Note:** Author takes zero credit for writing the code in the test files, noting they were generated using AI based on provided failure points.
+
+### Unexpected Behavior / To-Be-Changed
+* **File-Manager (Compact):** The `compact()` function might corrupt files if the system shuts down mid-execution.
+* **File-Manager (Data Wipe):** The constructor currently destroys working data and silently starts over if either database file is deleted. This needs to be documented and eventually changed to throw a runtime error instead.
