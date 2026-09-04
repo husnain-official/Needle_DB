@@ -86,7 +86,7 @@ protected:
         // shutdown exists today) -- not something this test file should work
         // around by changing server code.
         std::thread([this]()
-                     { server_->run(); })
+                    { server_->run(); })
             .detach();
 
         // Probe-connect to ensure the server thread has reached listen() before we proceed
@@ -234,7 +234,7 @@ TEST_F(VectorServerIntegrationTest, Insert_ValidCommand_ReturnsOk)
     send_command(client_fd, BuildInsertCommand("id_1", "Sample text block"));
     std::string response = read_response(client_fd);
 
-    EXPECT_EQ(response, "OK\n");
+    EXPECT_EQ(response, "INSERT <Successful>\n");
     close(client_fd);
 }
 
@@ -244,12 +244,12 @@ TEST_F(VectorServerIntegrationTest, Insert_DuplicateId_ReturnsWarning)
     ASSERT_GE(client_fd, 0);
 
     send_command(client_fd, BuildInsertCommand("id_dup", "Text A"));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
 
     send_command(client_fd, BuildInsertCommand("id_dup", "Text B"));
     std::string response = read_response(client_fd);
 
-    EXPECT_NE(response, "OK\n");
+    EXPECT_NE(response, "INSERT <Successful>\n");
     EXPECT_NE(response.find("WARNING <Id already exists"), std::string::npos);
 
     close(client_fd);
@@ -261,7 +261,7 @@ TEST_F(VectorServerIntegrationTest, Insert_ValidCommand_PersistsToRAMAndQueryabl
     ASSERT_GE(client_fd, 0);
 
     send_command(client_fd, BuildInsertCommand("id_find_me", "Data here"));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
 
     send_command(client_fd, BuildQueryCommand(1));
     std::string response = read_response(client_fd);
@@ -276,7 +276,7 @@ TEST_F(VectorServerIntegrationTest, Insert_ValidCommand_PersistsToDisk)
     ASSERT_GE(client_fd, 0);
 
     send_command(client_fd, BuildInsertCommand("id_disk_test", "Data to disk"));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
     close(client_fd);
 
     // Give OS brief moment to flush file streams natively via File_manager
@@ -316,7 +316,7 @@ TEST_F(VectorServerIntegrationTest, Query_ValidCommand_ReturnsResultsWithText)
 
     std::string expected_text = "Specific_Unique_Payload";
     send_command(client_fd, BuildInsertCommand("id_q1", expected_text));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
 
     send_command(client_fd, BuildQueryCommand(1));
     std::string response = read_response(client_fd);
@@ -383,7 +383,7 @@ TEST_F(VectorServerIntegrationTest, Query_TopKExceedsMax_ClampsToMax)
     for (size_t i = 0; i < insert_count; i++)
     {
         send_command(client_fd, BuildInsertCommand("clamp_id_" + std::to_string(i), "Txt"));
-        EXPECT_EQ(read_response(client_fd), "OK\n");
+        EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
     }
 
     size_t requested_k = schema::MAX_K_SIMILAR + 10;
@@ -418,10 +418,10 @@ TEST_F(VectorServerIntegrationTest, Delete_ValidId_ReturnsOkAndRemovesFromStore)
     ASSERT_GE(client_fd, 0);
 
     send_command(client_fd, BuildInsertCommand("id_to_delete", "Txt"));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
 
     send_command(client_fd, "DELETE id_to_delete\n");
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "DELETE <Successful>\n");
 
     send_command(client_fd, BuildQueryCommand(1));
     std::string query_res = read_response(client_fd);
@@ -451,12 +451,12 @@ TEST_F(VectorServerIntegrationTest, Delete_MiddleElement_LeavesRemainingElements
     for (size_t i = 0; i < 5; i++)
     {
         send_command(client_fd, BuildInsertCommand("mid_id_" + std::to_string(i), "Txt"));
-        EXPECT_EQ(read_response(client_fd), "OK\n");
+        EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
     }
 
     // Delete index 2 (Middle)
     send_command(client_fd, "DELETE mid_id_2\n");
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "DELETE <Successful>\n");
 
     // Query 0, 1, 3, 4 individually
     std::vector<size_t> remaining = {0, 1, 3, 4};
@@ -482,10 +482,10 @@ TEST_F(VectorServerIntegrationTest, Save_ValidCommand_ReturnsOkAndPersistsState)
     ASSERT_GE(client_fd, 0);
 
     send_command(client_fd, BuildInsertCommand("id_save", "Txt"));
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "INSERT <Successful>\n");
 
     send_command(client_fd, "SAVE\n");
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "SAVE <Successful>\n");
     close(client_fd);
 
     File_manager fm_verification(entry_path_, text_path_);
@@ -509,7 +509,7 @@ TEST_F(VectorServerIntegrationTest, Load_ValidCommand_ReloadsLiveStateFromDisk)
     read_response(client_fd);
 
     send_command(client_fd, "LOAD\n");
-    EXPECT_EQ(read_response(client_fd), "OK\n");
+    EXPECT_EQ(read_response(client_fd), "LOAD <Successful>\n");
 
     send_command(client_fd, BuildQueryCommand(5));
     std::string response = read_response(client_fd);
@@ -539,7 +539,7 @@ TEST_F(VectorServerIntegrationTest, PipelinedCommands_ProcessedIndependently)
     // Wait for the combined response
     std::string response = read_response(client_fd);
 
-    EXPECT_NE(response.find("OK\n"), std::string::npos);
+    EXPECT_NE(response.find("INSERT <Successful>\n"), std::string::npos);
     EXPECT_NE(response.find("id_pipe"), std::string::npos);
     EXPECT_NE(response.find("END\n"), std::string::npos);
 
@@ -569,7 +569,7 @@ TEST_F(VectorServerIntegrationTest, SplitCommand_ProcessedCorrectly)
     send(client_fd, part2.c_str(), part2.size(), 0);
 
     std::string response = read_response(client_fd);
-    EXPECT_EQ(response, "OK\n");
+    EXPECT_EQ(response, "INSERT <Successful>\n");
 
     close(client_fd);
 }

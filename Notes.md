@@ -1,4 +1,6 @@
-
+### 4/9/26:
+1. I think the compact() function is not in use anywhere currently, add some command for it, or hard code the logic such that if soft-deleated entries exceed a certain amount, a compact function will be called automatically, i think the best place for this to happed will be in delete command block in server.handel_client, as its the natural place, and we can also print out a message that it exceeded to engine make a complete new database. 
+2. Tests expect "OK\n" which is not shifted to, more descriptive state of the engine, so update the tests accordingly.
 
 
 

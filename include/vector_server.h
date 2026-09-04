@@ -16,6 +16,9 @@
 #include <string>
 #include <cstring>
 #include <iostream>
+#include <thread>
+#include <shared_mutex>
+#include <mutex>
 #include "schema.hpp"       // for schema-refrence
 #include "vector_store.h"   // for RAM updates/access
 #include "file_manager.h"   // for file/database updates/access
@@ -61,6 +64,7 @@ private:
     const Config con;
     std::string port_num;
     Parser parser = Parser{};
+    std::mutex store_mutex_;
     /**
      * @brief Processes and executes line-delimited text commands from an active socket.
      * @param client_fd Open file descriptor bound to the communicating client
