@@ -1,6 +1,8 @@
 ### Mult-threading of handle_clients()
 1. First i changed the code to run and pass all test files with 1 sub-thread for the only client connected, this was simple enough and was done using the thread library, and simple member functions like detach to detach the sub-thread from the parent thread, so the clients may remain independent which was the entire purpose. 
 2. NOTE: OK/n is now being switch to more usefull outputs like "DELETE <Successful>\n"
+3. Updated server test files to also test the concurrency, and multiple clients, Passed. 
+4. 
 
 
 

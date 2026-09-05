@@ -8,6 +8,7 @@
 #include <string>
 #include <cmath>
 #include <algorithm>
+#include <vector>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -21,6 +22,13 @@
 // Global port counter to prevent cross-test socket collisions during parallel or rapid sequential runs.
 // Note: This relies on these high ephemeral ports being available on the host machine.
 static std::atomic<uint16_t> port_counter{19000};
+
+// Adjustable starting points for concurrency tests (Groups 9-13)
+constexpr size_t kConcurrentClientCount = 10;
+constexpr size_t kConcurrentInsertCount = 20;
+constexpr size_t kConcurrentReaderCount = 8;
+constexpr size_t kMixedThreadsCount = 5;
+constexpr size_t kChurnIterations = 50;
 
 // -----------------------------------------------------------------------------
 // Test Fixture: End-to-End Server TCP Integration Setup
@@ -592,4 +600,324 @@ TEST_F(VectorServerIntegrationTest, UnrecognizedPrefix_SilentlyIgnored_Character
     EXPECT_TRUE(response.empty());
 
     close(client_fd);
+}
+
+// =============================================================================
+// Group 9: Concurrent Client Connections
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, ConcurrentConnections_AreServedSimultaneously)
+{
+    std::vector<std::thread> threads;
+    std::atomic<bool> start_flag{false};
+    std::atomic<int> success_count{0};
+
+    // Spawn kConcurrentClientCount threads, block them until start_flag is true to maximize true overlap
+    for (size_t i = 0; i < kConcurrentClientCount; i++)
+    {
+        threads.emplace_back([&, i]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                std::string id = "conn_id_" + std::to_string(i);
+                send_command(fd, BuildInsertCommand(id, "txt"));
+                std::string resp = read_response(fd);
+                if (resp == "INSERT <Successful>\n") {
+                    success_count++;
+                }
+                close(fd);
+            } });
+    }
+
+    // Release the barrier
+    start_flag.store(true, std::memory_order_release);
+
+    // Must join all local test threads
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+
+    EXPECT_EQ(success_count.load(), kConcurrentClientCount)
+        << "Not all concurrent connections successfully processed their INSERT.";
+
+    // Verify all inserts successfully persisted via a single new connection
+    int check_fd = connect_client(port_);
+    ASSERT_GE(check_fd, 0);
+    send_command(check_fd, BuildQueryCommand(kConcurrentClientCount + 5));
+    std::string query_res = read_response(check_fd, 1000); // Allow more time for large text stream
+
+    for (size_t i = 0; i < kConcurrentClientCount; i++)
+    {
+        std::string expected_id = "conn_id_" + std::to_string(i);
+        EXPECT_NE(query_res.find(expected_id), std::string::npos)
+            << "Concurrently inserted ID " << expected_id << " was lost.";
+    }
+    close(check_fd);
+}
+
+// =============================================================================
+// Group 10: Concurrent INSERTs
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, ConcurrentInserts_NoLostUpdatesOrCorruption)
+{
+    std::vector<std::thread> threads;
+    std::atomic<bool> start_flag{false};
+    std::atomic<int> success_count{0};
+
+    // Spin up multiple independent clients injecting to stress test store_mutex_
+    for (size_t i = 0; i < kConcurrentInsertCount; i++)
+    {
+        threads.emplace_back([&, i]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                std::string id = "stress_id_" + std::to_string(i);
+                send_command(fd, BuildInsertCommand(id, "Concurrent text " + std::to_string(i)));
+                std::string resp = read_response(fd);
+                if (resp == "INSERT <Successful>\n") {
+                    success_count++;
+                }
+                close(fd);
+            } });
+    }
+
+    start_flag.store(true, std::memory_order_release);
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+
+    EXPECT_EQ(success_count.load(), kConcurrentInsertCount);
+
+    // 1. Verify in-memory state hasn't lost any inserts via direct QUERY
+    int check_fd = connect_client(port_);
+    ASSERT_GE(check_fd, 0);
+    send_command(check_fd, BuildQueryCommand(kConcurrentInsertCount + 5));
+    std::string query_res = read_response(check_fd, 2000); // Extended timeout for large concurrent outputs
+
+    size_t found_count = 0;
+    for (size_t i = 0; i < kConcurrentInsertCount; i++)
+    {
+        std::string expected_id = "stress_id_" + std::to_string(i);
+        if (query_res.find(expected_id) != std::string::npos)
+        {
+            found_count++;
+        }
+    }
+    EXPECT_EQ(found_count, kConcurrentInsertCount)
+        << "Lost updates detected: in-memory state missed one or more concurrent inserts.";
+
+    // Check that we don't have corrupted/concatenated ids resulting in false total lines
+    size_t result_lines = std::count(query_res.begin(), query_res.end(), '\n') - 2; // header + END
+    EXPECT_EQ(result_lines, kConcurrentInsertCount)
+        << "Memory corruption detected: count of query result lines doesn't match total inserted.";
+
+    // Force flush the headers via SAVE
+    send_command(check_fd, "SAVE\n");
+    EXPECT_EQ(read_response(check_fd), "SAVE <Successful>\n");
+    close(check_fd);
+
+    // 2. Verify disk state hasn't lost any inserts
+    File_manager fm_verification(entry_path_, text_path_);
+    EXPECT_EQ(fm_verification.get_live_vector_count(), kConcurrentInsertCount)
+        << "Lost updates detected: on-disk live count missed concurrent inserts.";
+}
+
+// =============================================================================
+// Group 11: Concurrent QUERYs
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, ConcurrentQueries_NoCrashOrResponseCorruption)
+{
+    // Pre-insert a known, stable vector base
+    int setup_fd = connect_client(port_);
+    ASSERT_GE(setup_fd, 0);
+    send_command(setup_fd, BuildInsertCommand("static_target", "Static text"));
+    EXPECT_EQ(read_response(setup_fd), "INSERT <Successful>\n");
+    close(setup_fd);
+
+    std::vector<std::thread> threads;
+    std::atomic<bool> start_flag{false};
+    std::atomic<int> valid_queries{0};
+
+    // Spin up concurrent readers querying identical dataset simultaneously
+    for (size_t i = 0; i < kConcurrentReaderCount; i++)
+    {
+        threads.emplace_back([&]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                send_command(fd, BuildQueryCommand(5));
+                std::string resp = read_response(fd, 500);
+                
+                // Assert invariant well-formedness
+                if (resp.starts_with("QUERY <") && 
+                    resp.ends_with("END\n") && 
+                    resp.find("static_target") != std::string::npos) {
+                    valid_queries++;
+                }
+                close(fd);
+            } });
+    }
+
+    start_flag.store(true, std::memory_order_release);
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+
+    EXPECT_EQ(valid_queries.load(), kConcurrentReaderCount)
+        << "Concurrent readers failed to retrieve valid, uncorrupted response streams.";
+}
+
+// =============================================================================
+// Group 12: Concurrent Mixed Operations
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, ConcurrentMixed_OperationsMaintainConsistency)
+{
+    // Setup a deterministic baseline for deleters to target
+    int setup_fd = connect_client(port_);
+    ASSERT_GE(setup_fd, 0);
+    for (size_t i = 0; i < kMixedThreadsCount; i++)
+    {
+        send_command(setup_fd, BuildInsertCommand("pre_id_" + std::to_string(i), "Pre txt"));
+        EXPECT_EQ(read_response(setup_fd), "INSERT <Successful>\n");
+    }
+    close(setup_fd);
+
+    std::vector<std::thread> threads;
+    std::atomic<bool> start_flag{false};
+    std::atomic<int> format_failures{0};
+
+    // Spawn Inserters
+    for (size_t i = 0; i < kMixedThreadsCount; i++)
+    {
+        threads.emplace_back([&, i]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) std::this_thread::yield();
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                send_command(fd, BuildInsertCommand("new_id_" + std::to_string(i), "New txt"));
+                std::string r = read_response(fd);
+                if (r != "INSERT <Successful>\n") format_failures++;
+                close(fd);
+            } });
+    }
+
+    // Spawn Deleters (targeting exclusively the pre-inserted deterministic IDs)
+    for (size_t i = 0; i < kMixedThreadsCount; i++)
+    {
+        threads.emplace_back([&, i]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) std::this_thread::yield();
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                send_command(fd, "DELETE pre_id_" + std::to_string(i) + "\n");
+                std::string r = read_response(fd);
+                if (r != "DELETE <Successful>\n") format_failures++;
+                close(fd);
+            } });
+    }
+
+    // Spawn Readers (doing full reads under the write churn)
+    for (size_t i = 0; i < kMixedThreadsCount; i++)
+    {
+        threads.emplace_back([&]()
+                             {
+            while (!start_flag.load(std::memory_order_acquire)) std::this_thread::yield();
+            int fd = connect_client(port_);
+            if (fd >= 0) {
+                send_command(fd, BuildQueryCommand(schema::MAX_K_SIMILAR));
+                std::string r = read_response(fd, 500); 
+                if (!r.starts_with("QUERY <") || !r.ends_with("END\n")) format_failures++;
+                close(fd);
+            } });
+    }
+
+    start_flag.store(true, std::memory_order_release);
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+
+    // Ensure all received responses were perfectly well-formed, indicating no torn boundaries/socket interleaves
+    EXPECT_EQ(format_failures.load(), 0)
+        << "One or more mixed threads received a malformed or corrupted server response.";
+
+    // Mathematical invariant checks
+    // We started with kMixedThreadsCount.
+    // We inserted kMixedThreadsCount.
+    // We deleted kMixedThreadsCount.
+    // Total expected final count is EXACTLY kMixedThreadsCount.
+    int check_fd = connect_client(port_);
+    ASSERT_GE(check_fd, 0);
+
+    // Save to flush headers before reading from disk
+    send_command(check_fd, "SAVE\n");
+    EXPECT_EQ(read_response(check_fd), "SAVE <Successful>\n");
+    close(check_fd);
+
+    File_manager fm_verification(entry_path_, text_path_);
+    EXPECT_EQ(fm_verification.get_live_vector_count(), kMixedThreadsCount);
+
+    // Set invariant checks: Ensure exactly the new entries survived, and all pre entries are gone
+    for (size_t i = 0; i < kMixedThreadsCount; i++)
+    {
+        std::string sid = "new_id_" + std::to_string(i);
+        sid.resize(schema::ID_LENGTH, '\0');
+        EXPECT_NE(fm_verification.find_by_id(sid), -1)
+            << "Newly inserted ID " << sid << " was unexpectedly lost during churn.";
+
+        std::string pid = "pre_id_" + std::to_string(i);
+        pid.resize(schema::ID_LENGTH, '\0');
+        EXPECT_EQ(fm_verification.find_by_id(pid), -1)
+            << "Pre-inserted ID " << pid << " survived deletion during churn.";
+    }
+}
+
+// =============================================================================
+// Group 13: Resource Safety (Churn)
+// =============================================================================
+
+// Robustness/Informational Check: Validates that the server handles rapid connect/disconnect
+// cycling smoothly without degrading or running out of critical handling resources (like thread saturation).
+TEST_F(VectorServerIntegrationTest, ResourceSafety_RapidChurnDoesNotDegradeServer)
+{
+    for (size_t i = 0; i < kChurnIterations; i++)
+    {
+        int fd = connect_client(port_);
+        ASSERT_GE(fd, 0) << "Failed to connect on churn iteration " << i;
+
+        // Execute a fast, valid command
+        send_command(fd, BuildQueryCommand(1));
+        std::string resp = read_response(fd);
+
+        // Ensure the server responds healthily
+        EXPECT_TRUE(resp.starts_with("QUERY <"));
+        EXPECT_TRUE(resp.ends_with("END\n"));
+
+        // Terminate connection instantly
+        close(fd);
+    }
+
+    // Prove server hasn't degraded into an unresponsive state post-churn
+    int final_fd = connect_client(port_);
+    ASSERT_GE(final_fd, 0) << "Server failed to accept a final connection post-churn.";
+
+    send_command(final_fd, BuildInsertCommand("churn_survivor", "Text"));
+    EXPECT_EQ(read_response(final_fd), "INSERT <Successful>\n");
+
+    close(final_fd);
 }
