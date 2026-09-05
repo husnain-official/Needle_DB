@@ -2,7 +2,38 @@
 1. First i changed the code to run and pass all test files with 1 sub-thread for the only client connected, this was simple enough and was done using the thread library, and simple member functions like detach to detach the sub-thread from the parent thread, so the clients may remain independent which was the entire purpose. 
 2. NOTE: OK/n is now being switch to more usefull outputs like "DELETE <Successful>\n"
 3. Updated server test files to also test the concurrency, and multiple clients, Passed. 
-4. 
+
+### Cleaning up- before deciding what to do next.
+1. Updated the Config struct to only have members: port, entry_db_path, text_db_path
+2. Moved the Config struct to schema.hpp as it also provides system-level constraints.
+3. Config struct's entry file now renamed to "./data/database_entry.vdb" from "./data/database.vdb"
+4. Cleaned up schema.hpp, needs new doxy for 'Vector'. 
+5. Cleaned up similarities.hpp, has dead code (2 cosine_similarity functions) in it. 
+6. Cleaned up env_config.hpp, NOTE: in the final documentation, EXPLICITLY, state the code in this file was AI generated.
+7. Cleaned up command_parser.h/cpp and updated the doxy in .h manually.
+8. File_manager.delete_entry() parameter index is now a const
+9. Cleaned up file_manager.h/cpp
+10. 
+
+### Persistence of ivf centroids(next commit, not this one)
+
+
+
+NOTE:1  |   Types.hpp cleaned, now only has 2 structs(Query_result, Parse_result), and one conversion function which copies data from a 'Entry' struct to a 'Vector' struct
+
+NOTE:2  |   'Vector' struct in schema.hpp has no doxy. 
+
+NOTE:3  |   All files use #ifndef and #endif, blocks but schema.hpp uses #prama once, switch all to 1. 
+
+NOTE:4  |   in similarities.hpp two cosine_similarity() functions exist, they are not used anywhere in the system, only present because of their initial use from before release of v1. Can safely delete both functions, or just let them be. They are not written efficiently either, both use sqrt frequently, and disobey the "dont repeat yourself" rule.
+
+NOTE:5  |   In file_manager.h, read_text() needs doxy.
+
+NOTE:6  |   File_manager.find_by_id() is a O(n) function as the database is not sorted, make this a goal for v3, to somehow get this logrithmic, ofcourse after some sort of linearithmic sorting.
+
+NOTE:7  |   File_manager.compact(), also needs stored safety conditions, maybe v2 or v3.
+NOTE:8  |   Vector_server needs new doxy
+NOTE:9  |  
 
 
 

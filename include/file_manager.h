@@ -19,28 +19,27 @@ public:
      * @brief Initializes the binary file handler and validates schema compatibility.
      * @param path Target filesystem path for the persistent database file
      * @warning Throws std::runtime_error if an existing file schema mismatches configuration
+     * @warning Will recreate both databases, if one or both are missing.
      */
     explicit File_manager(const std::string &path, const std::string &text_path);
 
-    // Core operations — all O(1) with fixed record size, except find by id O(n)
+    // --- Core operations — all O(1) with fixed record size, except find by id O(n) and compact O(n)
     /**
-     * @brief Appends a new contiguous vector record to the EOF.
-     * @param id String identifier to persist, truncated to configured fixed length
-     * @param data Raw contiguous floating-point sequence matching configured dimensions
-     * @param mdata_arr Array of metadata key-value pairs or nullptr
+     * @brief Appends a new contiguous entry record to the EOF.
+     * @param entry DB_Entry object to be writte to Disk
+     * @param text Text of the entry, to be stored in a seperate file
      * @return True upon successful disk flush, false otherwise
      * @warning Does not verify if the string identifier already exists on disk
      */
-    bool write_entry(DB_entry &, std::string &);
+    bool write_entry(DB_entry &entry, std::string &text);
     /**
      * @brief Extracts a specific vector record from disk into active memory.
      * @param index Target sequential record offset
-     * @param id_out Output string reference populated with the extracted identifier
-     * @param data_out Pre-allocated array to receive raw embedding floats
-     * @param mdata_arr Pre-allocated array or nullptr to bypass metadata extraction
+     * @param entry Output DB_Entry data structure fully populated
+     * @param text Output text assosiated with the entry at index
      * @return True on success, false if the record contains a tombstone flag or exceeds bounds
      */
-    bool read_entry(size_t index, DB_entry &, std::string &);
+    bool read_entry(size_t index, DB_entry &entry, std::string &text);
     bool read_text(const size_t text_length, const size_t text_offset, std::string &text);
     /**
      * @brief Marks a persistent disk record as soft-deleted via a tombstone flag.
@@ -48,15 +47,23 @@ public:
      * @return True if the tombstone bit successfully writes, false on failure
      * @warning Does not reclaim physical disk space
      */
-    bool delete_entry(size_t);
+    bool delete_entry(const size_t index);
     /**
      * @brief Locates the logical disk offset of a specific string identifier.
      * @param id Target string identifier to search
      * @return Sequential record index, or negative one if unfound
      * @warning Executes an unoptimized O(N) linear scan across the binary file
      */
-    int64_t find_by_id(const std::string &);
-    // Header I/O
+    int64_t find_by_id(const std::string &id);
+    /**
+     * @brief Rewrites the persistent binary file to purge all soft-deleted records.
+     * @warning Blocks all active I/O operations and requires additional temporary disk space
+     * @warning Does not include safety for cases when power/engine stops mid this function's working, All data will be corrupted.
+     * @return True if the disk update succeeds, false otherwise
+     */
+    bool compact();
+
+    // --- Header I/O
     /**
      * @brief Synchronizes the cached header structure to the beginning of the binary file.
      * @return True if the disk write succeeds, false otherwise
@@ -69,13 +76,7 @@ public:
      */
     DB_header read_header();
 
-    // Helpers/getters
-    /**
-     * @brief Rewrites the persistent binary file to purge all soft-deleted records.
-     * @warning Blocks all active I/O operations and requires additional temporary disk space
-     * @return True if the disk update succeeds, false otherwise
-     */
-    bool compact();
+    // --- Helpers/getters
     size_t get_live_vector_count() const;
     size_t get_total_vector_count() const;
 

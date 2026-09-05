@@ -1,6 +1,5 @@
 #include "ivf.h"
 
-// Fixed Euclidean distance: Computes squared L2 distance (avoids costly sqrt)
 // Overloaded to accept raw pointers for high-performance tight loops
 float IVF_index::euclidean_distance(const float *v1, const float *v2) const
 {

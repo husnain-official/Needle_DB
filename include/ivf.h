@@ -66,7 +66,6 @@ public:
     IVF_index(size_t nlist = 100, size_t nprobe = 5) : centroid_count(nlist), nprobe(nprobe) {}
     ~IVF_index() override = default;
 
-    // Fixed Euclidean distance: Computes squared L2 distance (avoids costly sqrt)
     // Overloaded to accept raw pointers for high-performance tight loops
     /**
      * @brief Computes the squared L2 distance between two contiguous memory blocks.

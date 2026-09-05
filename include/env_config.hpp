@@ -1,12 +1,11 @@
 #ifndef ENV_CONFIG_HPP
 #define ENV_CONFIG_HPP
-
 #include <fstream>
 #include <string>
 #include <unordered_map>
 #include "types.h"
 
-// ----- Helper ------------------------------
+// --- Helper
 // Helper to trim spaces, quotes, and carriage returns
 inline std::string trimEnv(const std::string &str)
 {
@@ -17,11 +16,7 @@ inline std::string trimEnv(const std::string &str)
     return str.substr(first, (last - first + 1));
 }
 
-/*
- * Reads the .env file and assigns the found values to the provided references.
- * Returns true if the file was opened successfully, false otherwise.
- */
-// ----- To_call ------------------------------
+// --- To_call
 /**
  * @brief Parses an environment file to populate global operational constraints.
  * @param envFilePath File system path targeting the plain text configuration file
@@ -72,4 +67,5 @@ inline bool loadServerConfig(const std::string &envFilePath, Config &con)
     }
     return true;
 }
+
 #endif // ENV_CONFIG_HPP

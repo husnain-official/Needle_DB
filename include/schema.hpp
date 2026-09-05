@@ -3,8 +3,8 @@
 #include <vector>
 /*
     1. DE_entry and Vector both have many overlapping elements, but they are different as they are used for seperate purposes and places.
-        DB_entry usage is limited to file_manager's internals.
-        Vector is for vector_store's internals and other parts of the system.
+        o   DB_entry usage is limited to file_manager's internals.
+        o   Vector is for vector_store's internals and other parts of the system.
 */
 //  ----------------------------------------- Engine-Schema ------------------------------------------
 namespace schema
@@ -15,10 +15,26 @@ namespace schema
     constexpr uint8_t META_DATA_LENGTH = 32;
     constexpr uint8_t META_DATA_KP_PAIRS = 3;
     constexpr uint16_t TEXT_MAX_LENGTH = 999;
-    constexpr uint8_t VERSION = 5;
+    constexpr uint8_t VERSION = 6;
     constexpr char MAGIC_NUMBER[4] = {'V', 'D', 'B', '\0'};
     constexpr uint8_t MAX_K_SIMILAR = 30;
 }
+
+/**
+ * @brief Defines system-wide operational constraints populated during startup.
+ * @note Instances are passed by constant reference throughout the application lifecycle.
+ *
+ * @param port Port where engines TCP conncection will be listening from.
+ * @param vecdb_entry_file_path Entry database file path
+ * @param vecdb_text_file_path Text database file path
+ */
+struct Config
+{
+    std::string port = "8080";
+    std::string vecdb_entry_file_path = "./data/database_entry.vdb";
+    std::string vecdb_text_file_path = "./data/database_text.vdb";
+};
+
 //  ---------------------------------------- Data-Base-Schema ----------------------------------------
 #pragma pack(push, 1) // No hidden padding! Keep the bytes explicit.
 
@@ -27,7 +43,7 @@ namespace schema
  * @note Strictly packed to 1-byte alignment to prevent cross-platform memory padding inconsistencies.
  *
  * @param live_vector_count  entires with flag '1'
- * @param total_vector_count includes entries with flag '0' / deleted vectors
+ * @param total_vector_count includes entries with flag '0' / deleted entires
  * @param magic_number       {'V','D','B','\0'}, required file-format
  * @param dimensions         dims of each vector = 1536/1024/768
  * @param version            version of database
@@ -70,10 +86,13 @@ static_assert(sizeof(Metadata_entry) == 64, "[schema.hpp]  |  Key-Value layout m
 /**
  * @brief Represents a single vector record in the database.
  *
- * @param flag       Status of the entry (e.g., 1 for active/live, 0 for deleted).
- * @param id         Unique 32-bit identifier for the record.
- * @param meta_data  Array of key-value pairs storing associated metadata.
- * @param embeddings The high-dimensional vector data array.
+ * @param flag              Status of the entry (e.g., 1 for active/live, 0 for deleted).
+ * @param id                Unique 32-bit identifier for the record.
+ * @param text_offset       Position in bytes where the text entry gets written from.
+ * @param text_length       Length of the text.
+ * @param meta_data         Array of key-value pairs storing associated metadata.
+ * @param meta_data_count   Meta-data enties passed in this entry.
+ * @param embeddings        The high-dimensional vector data array.
  */
 struct DB_entry
 {

@@ -147,7 +147,7 @@ bool File_manager::read_entry(size_t index, DB_entry &entry, std::string &text)
     text_file_.read(reinterpret_cast<char *>(text.data()), entry.text_length);
     return text_file_.good();
 }
-bool File_manager::delete_entry(size_t index)
+bool File_manager::delete_entry(const size_t index)
 {
     // --- Entry-DB ---
     file_.clear();

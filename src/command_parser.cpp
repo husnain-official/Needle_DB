@@ -5,7 +5,7 @@
  *
  * Command Format:
  * INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
- * OLD Format: <id> <dims> [key=val ...] f1 f2 ... fn
+ * OLD Format(v1): <id> <dims> [key=val ...] f1 f2 ... fn
  *
  * Rules & Behavior:
  * 1. Command Prefix:

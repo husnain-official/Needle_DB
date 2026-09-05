@@ -8,34 +8,34 @@ class Parser
 public:
     /**
      * @brief Extracts identifier, metadata, and embedding components from a raw insertion command string.
-     * @param v Vector instance populated upon successful extraction
-     * @param command Raw newline-terminated text string from the client
-     * @param con Immutable environment constraints for bounds checking
+     * @param entry DB_Entey instance populated upon successful extraction
+     * @param extracted_text Raw newline-terminated text string from the client
+     * @param command Raw newline-terminated text string, to be parsed
      * @return Success boolean paired with a diagnostic message on failure
-     * @note Expects the exact format: INSERT <id> <dims> [key=val ...] f1 f2 ... fn
+     * @note Expects the exact format: INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
      * @warning Fails securely if the dimensional count or string lengths exceed configured limits
      */
-    Parse_result insert_parsing(DB_entry &, std::string &, const std::string &);
+    Parse_result insert_parsing(DB_entry &entry, std::string &extracted_text, const std::string &command);
     /**
      * @brief Decodes network queries into actionable search constraints and target embeddings.
-     * @param v Vector struct populated with query metadata and floats
+     * @param v Vector struct populated with query metadata and floats, and other data
      * @param top_k Output reference for the requested maximum match count
-     * @param command Raw newline-terminated text string
-     * @param con Immutable environment constraints
+     * @param command Raw newline-terminated text string, to be parsed
      * @return Status object indicating structural validity of the protocol text
      * @note Limits metadata constraints strictly to the configured maximum pairs
+     * @note Expects the exact format: QUERY <top_k> <dims> [key=val ...] f1 f2 ... fn
      * @warning Silently clamps top_k to a hardcoded maximum if the requested value is excessively large
      */
-    Parse_result query_parsing(Vector &, size_t &, const std::string &);
+    Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command);
     /**
      * @brief Extracts a target vector identifier from a client deletion command.
      * @param id Output string populated with the extracted identifier
      * @param command Raw network string containing the deletion request
-     * @param con Configured system constraints
      * @return Success status paired with an empty string or error diagnostic
      * @warning Does not verify if the extracted identifier actually exists within the storage engine
+     * @note Expects the exact format: DELETE <id>
      */
-    Parse_result delete_parsing(std::string &, const std::string &);
+    Parse_result delete_parsing(std::string &id, const std::string &command);
     /**
      * @brief Validates syntax for explicit persistence synchronization or memory reload commands.
      * @param command Raw input string directly from the socket buffer
@@ -43,6 +43,7 @@ public:
      * @param con Global configurations
      * @return Struct containing operation success status
      * @warning Mutates the input command string by stripping all whitespace characters internally
+     * @note Expects the exact format: SAVE or LOAD
      */
     Parse_result save_parsing(std::string &, bool);
 
