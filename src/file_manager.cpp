@@ -1,199 +1,321 @@
 #include "file_manager.h"
 // --- Constructor
-File_manager::File_manager(const std::string &path, uint32_t dims, uint8_t id_len, uint8_t kv_len, uint8_t kv_max_pairs)
+File_manager::File_manager(const std::string &path, const std::string &text_path, const std::string &index_path) : path_(path), text_file_path_(text_path), index_file_path_(index_path)
 {
-    // Purpose: Boot-up the litteral 'file-manager'
-    // First initilize the header
-    header_.dimensions = dims;
-    header_.id_length = id_len;
-    header_.kv_length = kv_len;
-    header_.max_kv = kv_max_pairs;
-    memcpy(header_.magic_number, "VDB", 4);
-    memset(header_.padding, 0, sizeof(header_.padding));
-    header_.total_vector_count = 0;
-    header_.live_vector_count = 0;
-    header_.version = 4;
-    // Initilize other elements
-    record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (header_.kv_length * (header_.max_kv * 2));
-    // record_size_ = 1 + header_.id_length + (sizeof(float) * header_.dimensions) + (sizeof(Metadata_entry)); thiss will make it not work
-    if (!(std::filesystem::exists(path)))
+    // 1. Initilize elements of 'File_manager' instance being created.
+    header_ = DB_header(); // Create a instance of a 'Header' with pre-filled data, from 'schema.hpp'.
+    record_size_ = sizeof(DB_entry);
+    // 2.
+    //  If any one of the text or entry files is not present then we throw, both are independent data sources.
+    //  If both are not present we recreate them and write header_.
+    //  Index file, is a depended data, its just efficiency tool, if its not found, dont throw error, just remake it, at load it will be refilled.
+    bool entry_exists = std::filesystem::exists(path);
+    bool text_exists = std::filesystem::exists(text_path);
+    bool index_exists = std::filesystem::exists(index_path);
+
+    if (!index_exists)
+    {
+        this->index_file_.open(index_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!index_file_.is_open())
+            throw std::runtime_error("[File_manager()] | Cannot create DB index file: " + index_path);
+        std::cout << "[File_manager()] | Index-Data-Base Created\n";
+    }
+    else
+        index_file_.open(index_path, std::ios::in | std::ios::out | std::ios::binary);
+
+    if (entry_exists != text_exists)
+    {
+        throw std::runtime_error("[File_manager()] | Database corruption: Some DB files are missing while others exist. Please check your DB directory.");
+    }
+    if ((!entry_exists) and (!text_exists))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
         if (!(file_.is_open()))
-            throw std::runtime_error("Cannot create DB file: " + path);
+            throw std::runtime_error("[File_manager()] | Cannot create DB entry file: " + path);
         flush_header();
-        std::cout << "Data-Base Created\n";
+        std::cout << "[File_manager()] | Entry-Data-Base Created\n";
+        this->text_file_.open(text_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!text_file_.is_open())
+            throw std::runtime_error("[File_manager()] | Cannot create DB text file: " + text_path);
+        std::cout << "[File_manager()] | Text-Data-Base Created\n";
     }
     else
     {
         file_.open(path, std::ios::in | std::ios::out | std::ios::binary);
+        text_file_.open(text_path, std::ios::in | std::ios::out | std::ios::binary);
     }
+
     if (!file_.is_open())
-        throw std::runtime_error("Cannot create DB file: " + path);
+        throw std::runtime_error("[File_manager()] | Cannot open DB entry file: " + path);
+    if (!text_file_.is_open())
+        throw std::runtime_error("[File_manager()] | Cannot open DB text file: " + text_path);
+    if (!index_file_.is_open())
+        throw std::runtime_error("[File_manager()] | Cannot open DB index file: " + index_path);
     header_ = read_header();
-    if (std::strncmp(header_.magic_number, "VDB", 3) != 0)
+    // 3. Check if schema matches, else throw error.
+    if (std::strncmp(header_.magic_number, schema::MAGIC_NUMBER, 4) != 0)
     {
-        throw std::runtime_error("Invalid file format: Magic number mismatch.");
+        throw std::runtime_error("[File_manager()] | Invalid file format: Magic number mismatch.");
     }
-    if (header_.version != 4)
+    if (header_.version != schema::VERSION)
     {
-        throw std::runtime_error("Schema mismatch: Incompatible database version. Expected Version 4.");
+        throw std::runtime_error("[File_manager()] | Schema mismatch: Incompatible database version. Expected Version '" + std::to_string(schema::VERSION) + "' .");
     }
-    if (header_.dimensions != dims or header_.id_length != id_len or header_.kv_length != kv_len or header_.max_kv != kv_max_pairs)
+    if (header_.dimensions != schema::DIMENSIONS or header_.id_length != schema::ID_LENGTH or header_.kv_length != schema::META_DATA_LENGTH or header_.max_kv != schema::META_DATA_KP_PAIRS)
     {
-        throw std::runtime_error("Schema mismatch: File dimensions/ID length/Meta-data do not match provided arguments.");
+        throw std::runtime_error("[File_manager()] | Schema mismatch: File dimensions/ID length/Meta-data do not match provided arguments.");
     }
-    std::cout << "Data-Base path opened successfully\n";
+    std::cout << "[File_manager()] | Data-Base path opened successfully\n";
 }
 // --- Header-Related-Functions
-Header File_manager::read_header()
+DB_header File_manager::read_header()
 {
-    Header h;
+    DB_header h;
     file_.clear();
     file_.seekg(0);
-    file_.read(reinterpret_cast<char *>(&h), sizeof(Header));
+    file_.read(reinterpret_cast<char *>(&h), sizeof(DB_header));
     return h;
 }
 bool File_manager::flush_header()
 {
     file_.clear();
-    // After any change/insersion update header in the database
     file_.seekp(0);
-    file_.write(reinterpret_cast<char *>(&header_), sizeof(Header));
+    file_.write(reinterpret_cast<char *>(&header_), sizeof(DB_header));
     file_.flush();
     return file_.good();
 }
 // --- Getters
-uint64_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
-uint64_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
-uint64_t File_manager::get_record_size() const { return record_size_; }
-uint64_t File_manager::get_record_offset(uint64_t index) const { return (sizeof(Header) + index * record_size_); }
-void File_manager::compact() {}
-// --- Core-Operations
-bool File_manager::write_vector(const std::string &id, const float *embeddings, const Metadata_entry *mdata_arr)
+size_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
+size_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
+size_t File_manager::get_record_offset(size_t index) const { return (sizeof(DB_header) + index * record_size_); }
+// --- Helpers
+bool rename_file(const std::string &old_name, const std::string &new_name)
 {
+    std::error_code ec;
+    // The ec variable will capture any errors (like "File not found")
+    std::filesystem::rename(old_name, new_name, ec);
+    if (ec)
+    {
+        std::cerr << "Error renaming: " << ec.message() << "\n";
+        return false;
+    }
+    return true;
+}
+bool delete_file(const std::string &filepath)
+{
+    std::error_code ec;
+    // remove() returns true if a file was deleted, false if it didn't exist
+    bool success = std::filesystem::remove(filepath, ec);
+    if (ec)
+    {
+        std::cerr << "Error deleting: " << ec.message() << "\n";
+        return false;
+    }
+    return success;
+}
+bool File_manager::is_index_populated() const
+{
+    return !(std::filesystem::is_empty(index_file_path_));
+}
+// --- Core-Operations
+bool File_manager::write_entry(DB_entry &entry, std::string &text)
+{
+    // NOTE: Responsibility of caller to use a fresh/new entry refrence
+    // --- Text-DB ---
+    // Setup
+    text_file_.clear();
+    // Move to eof
+    text_file_.seekp(0, std::ios::end);
+    entry.text_offset = text_file_.tellp();
+    // Flag writing
+    text_file_.write(reinterpret_cast<const char *>(&entry.flag), 1);
+    if (!text_file_.good())
+        return false;
+    // Text writing
+    text_file_.write(reinterpret_cast<const char *>(text.data()), text.size());
+    if (!text_file_.good())
+        return false;
+    // --- Entry-DB ---
     file_.clear();
-    // 1.   move the write cursor to the eof
-    // file_.seekp(get_record_offset(header_.total_vector_count));
     file_.seekp(0, std::ios::end);
-    // file_.seekp(get_record_offset(header_.total_vector_count));
-    // 2.   intilize the flag
-    char active_flag = 1;
-    file_.write(&active_flag, 1);
-    // 3.   WRITE:ID         add padding in case, id.length() < header_.id_length
-    std::vector<char> id_padded(header_.id_length, '\0');
-    size_t chars_to_copy = std::min(id.length(), static_cast<size_t>(header_.id_length));
-    std::copy(id.begin(), id.begin() + chars_to_copy, id_padded.begin());
-    file_.write(id_padded.data(), header_.id_length);
-    // 4.   WRITE:META-DATA
-    if (!mdata_arr)
-    {
-        Metadata_entry mdata = {0};
-        for (int i = 0; i < header_.max_kv; i++)
-            file_.write(reinterpret_cast<char *>(&mdata), header_.kv_length * 2);
-    }
-    else
-    {
-        Metadata_entry mdata;
-        for (int i = 0; i < header_.max_kv; i++)
-        {
-            // i) add padding to the mdata
-            memset(&mdata, 0, sizeof(mdata));
-            // ii) measure source length
-            size_t key_len = strnlen(mdata_arr[i].key, header_.kv_length);
-            size_t val_len = strnlen(mdata_arr[i].value, header_.kv_length);
-            // iii) copy data
-            memcpy(mdata.key, mdata_arr[i].key, key_len);
-            memcpy(mdata.value, mdata_arr[i].value, val_len);
-            // iv) Write these values into the file
-            file_.write(reinterpret_cast<char *>(mdata.key), header_.kv_length);
-            file_.write(reinterpret_cast<char *>(mdata.value), header_.kv_length);
-        }
-    }
-    // 5.   WRITE:EMBEDDINGS
-    file_.write(reinterpret_cast<const char *>(embeddings), (sizeof(float) * header_.dimensions));
-    // 5.   Cleanup
+    file_.write(reinterpret_cast<const char *>(&entry), sizeof(DB_entry));
     if (!file_.good())
         return false;
+    // Clean-up
     header_.total_vector_count++;
     header_.live_vector_count++;
     flush_header();
     return file_.good();
 }
-bool File_manager::read_vector(uint64_t index, std::string &id_out, float *data_out, Metadata_entry *mdata_arr)
+bool File_manager::read_entry(size_t index, DB_entry &entry, std::string &text)
 {
+    // Note: Again responsibility of caller to provide a fresh/new entry refrence
+    // Note: Since, text size is'nt known before hand so, this function will resize 'text' itself
+    // --- Entry-DB ---
     file_.clear();
-    // 0.   Check
+    // Check-01
     if (index >= ((header_.total_vector_count)))
         return false;
-    // 1.   We check the flag first, if deleted return immediately.
+    // Move to offset
     file_.seekg(get_record_offset(index));
-    char active_flag;
-    file_.read(&active_flag, 1);
-    if (active_flag == 0)
+    // Read entry
+    file_.read(reinterpret_cast<char *>(&entry), sizeof(DB_entry));
+    if (!file_.good() or entry.flag == 0)
         return false;
-    // 2.   Read the id, and prepare id_out
-    std::vector<char> id(header_.id_length);
-    file_.read(id.data(), header_.id_length);
-    id_out.resize(header_.id_length, '\0');
-    id_out.assign(id.data(), header_.id_length);
-    size_t first_null = id_out.find('\0'); // trim the extra entries off
-    if (first_null != std::string::npos)
-        id_out.resize(first_null);
-    //  3.  Read the meta-data
-    // i) necessary vars
-    std::vector<char> key(header_.kv_length, '\0');
-    std::vector<char> value(header_.kv_length, '\0');
-    // ii) read
-    if (!mdata_arr)
-    {
-        file_.seekg(header_.kv_length * 2 * header_.max_kv, std::ios::cur);
-    }
-    else
-    {
-        for (int i = 0; i < header_.max_kv; i++)
-        {
-            // Zero out the struct first to ensure clean padding
-            std::memset(&mdata_arr[i], 0, sizeof(mdata_arr[i]));
-
-            // Read directly from the file into the struct's memory
-            file_.read(reinterpret_cast<char *>(mdata_arr[i].key), header_.kv_length);
-            file_.read(reinterpret_cast<char *>(mdata_arr[i].value), header_.kv_length);
-            // it is the callers responsibility to properly manage the C - string, as it may not have a null terminator
-        }
-    }
-    //  4.  Read the embeddings
-    file_.read(reinterpret_cast<char *>(data_out), sizeof(float) * header_.dimensions);
-    //  5.  Return file state
-    return file_.good();
+    // --- Text-DB ---
+    text_file_.clear();
+    text_file_.seekg(entry.text_offset);
+    // Redundant but safety ?
+    char flag = 0;
+    text_file_.read((&flag), 1);
+    if (!text_file_.good() or flag == 0)
+        return false;
+    // Redundancy ends here, we could trust the entry's flag check that was done above
+    text.resize(entry.text_length);
+    text_file_.read(reinterpret_cast<char *>(text.data()), entry.text_length);
+    return text_file_.good();
 }
-bool File_manager::delete_vector(uint64_t index)
+bool File_manager::delete_entry(const size_t index)
 {
+    // --- Entry-DB ---
     file_.clear();
-    // 0.   Check
+    //  Check
     if (index >= ((header_.total_vector_count)))
         return false;
-    // 1.   Move to intended Record
+    //  Check - Already deleted ?
+    DB_entry entry_read;
+    file_.seekg(get_record_offset(index));
+    file_.read(reinterpret_cast<char *>(&entry_read), sizeof(DB_entry));
+    if (!file_.good())
+        return false;
+    if (!entry_read.flag)
+        return true;
+    //  Move to intended Record
     file_.seekp(get_record_offset(index));
-    // 2.   Change flag to 0
-    char x = 0;
-    file_.write(&x, 1);
-    // 3.cleanup
+    //  Change flag to 0
+    char flag = 0;
+    file_.write(&flag, 1);
+    if (!file_.good())
+        return false;
+    //  Cleanup
     header_.live_vector_count--;
     file_.flush();
     flush_header();
-    // 4.   Return file-state
-    return file_.good();
+    // --- Text-DB ---
+    text_file_.clear();
+    text_file_.seekp(entry_read.text_offset);
+    text_file_.write(&flag, 1);
+    text_file_.flush();
+    return text_file_.good();
 }
-int64_t File_manager::find_by_id(const std::string &id)
+bool File_manager::read_text(const size_t text_length, const size_t text_offset, std::string &text)
+{
+    text_file_.clear();
+    text_file_.seekp(0, std::ios::end);
+    size_t file_size = static_cast<size_t>(text_file_.tellp());
+    if (text_offset > file_size || (file_size - text_offset) < (text_length + 1))
+        return false;
+    // Move to offset
+    text_file_.seekg(text_offset);
+    // Read the flag
+    char flag = 0;
+    text_file_.read(&flag, 1);
+    if (!text_file_.good() or flag == 0)
+        return false;
+    // Read the text
+    text.resize(text_length);
+    text_file_.read(reinterpret_cast<char *>(text.data()), text_length);
+    return text_file_.good();
+}
+bool File_manager::compact()
+{
+    try
+    {
+        // 1. Create a temporary new file
+        std::string temp_path = "./data/temp_database.vdb";
+        std::string temp_text_path = "./data/temp_text_database.vdb";
+        std::fstream new_file;
+        std::fstream new_text_file;
+        new_file.open(temp_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!new_file.is_open())
+            throw std::runtime_error("[File_manager] | Couldn't create new file " + temp_path);
+        new_text_file.open(temp_text_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!new_text_file.is_open())
+            throw std::runtime_error("[File_manager] | Couldn't create new file " + temp_path);
+        text_file_.seekg(0);
+
+        // 2. [Header]
+        DB_header h_new = read_header();
+        h_new.total_vector_count = h_new.live_vector_count;
+        new_file.write(reinterpret_cast<const char *>(&h_new), sizeof(DB_header));
+
+        // 3. [Entries]
+        DB_entry entry;
+        std::string temp_str;
+        char flag = 1;
+        for (size_t i = 0; i < header_.total_vector_count; i++)
+        {
+            temp_str.clear();
+            memset(&entry, 0, sizeof(DB_entry));
+
+            if (!read_entry(i, entry, temp_str))
+                continue;
+
+            entry.text_offset = new_text_file.tellp();
+            new_text_file.write(&flag, 1);
+            new_text_file.write(reinterpret_cast<const char *>(temp_str.data()), temp_str.size()); // Note: temp_str.size() == entry.text_length;
+            new_file.write(reinterpret_cast<const char *>(&entry), sizeof(DB_entry));
+
+            if (!new_file.good())
+                throw std::runtime_error("[File_manager] | Couldn't write entry to new file.");
+            if (!new_text_file.good())
+                throw std::runtime_error("[File_manager] | Couldn't write entry to new file.");
+        }
+
+        // 4. [File Replacements]
+        // Currently, this is a bad function as it allows data corruption in case of shutdown, later on shift to a better implementation.
+        file_.close();
+        text_file_.close();
+        new_file.close();
+        new_text_file.close();
+
+        if (!delete_file(path_) or !(delete_file(text_file_path_)))
+            throw std::runtime_error("[File_manager] | Couldn't delete old database.");
+
+        if (!rename_file(temp_path, path_))
+            throw std::runtime_error("[File_manager] | Couldn't rename new database.");
+        if (!rename_file(temp_text_path, text_file_path_))
+            throw std::runtime_error("[File_manager] | Couldn't rename new text database.");
+
+        // 5. Re-initialize the manager so the rest of the app can keep running
+        file_.open(path_, std::ios::in | std::ios::out | std::ios::binary);
+        if (!file_.is_open())
+            throw std::runtime_error("[File_manager] | Couldn't reopen database after compaction.");
+
+        text_file_.open(text_file_path_, std::ios::in | std::ios::out | std::ios::binary);
+        if (!text_file_.is_open())
+            throw std::runtime_error("[File_manager] | Couldn't reopen text database after compaction.");
+
+        // 6. Re-initilize the RAM cache
+        header_ = h_new;
+
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error Contracting: " << e.what() << "\n";
+        return false;
+    }
+}
+long File_manager::find_by_id(const std::string &id)
 {
     // Prevent false matches if search ID is too long
     if (id.length() > header_.id_length)
         return -1;
     file_.clear();
     //     Loop through each 'Record' and compare ids
-    std::vector<char> id_extracted(header_.id_length);
-    for (uint64_t i = 0; i < header_.total_vector_count; i++)
+    std::vector<char> id_extracted(header_.id_length, '\0');
+    for (size_t i = 0; i < header_.total_vector_count; i++)
     {
         file_.seekg(get_record_offset(i));
 
@@ -202,7 +324,6 @@ int64_t File_manager::find_by_id(const std::string &id)
         if (!file_.read(&flag_state, 1))
             break;
 
-        // file_.read(&flag_state, 1);
         if (flag_state == 1)
         {
             file_.read(id_extracted.data(), header_.id_length);
@@ -211,4 +332,40 @@ int64_t File_manager::find_by_id(const std::string &id)
         }
     }
     return -1;
+}
+std::vector<float> File_manager::read_index_(const size_t centroid_numbers)
+{
+    size_t total_floats = centroid_numbers * schema::DIMENSIONS;
+    size_t total_bytes = total_floats * sizeof(float);
+    index_file_.clear();
+    index_file_.seekg(0, std::ios::beg);
+    std::vector<float> centroids(total_floats, 0.0f);
+    index_file_.read(reinterpret_cast<char *>(centroids.data()), total_bytes);
+    if (!index_file_.good())
+        return {};
+    else
+        return centroids;
+}
+bool File_manager::write_index_(const float *centroids_ptr, const size_t centroid_numbers)
+{
+    size_t total_floats = centroid_numbers * schema::DIMENSIONS;
+    size_t total_bytes = total_floats * sizeof(float);
+    index_file_.clear();
+    index_file_.seekp(0, std::ios::beg);
+    index_file_.write(reinterpret_cast<const char *>(centroids_ptr), total_bytes);
+    index_file_.flush();
+    return index_file_.good();
+}
+size_t File_manager::get_index_size()
+{
+    try
+    {
+        std::uintmax_t size = std::filesystem::file_size(index_file_path_);
+        return size;
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+        std::cerr << "Error: " << e.what() << '\n';
+        return 0;
+    }
 }

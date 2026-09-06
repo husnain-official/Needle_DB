@@ -1,26 +1,11 @@
 #ifndef ENV_CONFIG_HPP
 #define ENV_CONFIG_HPP
-
 #include <fstream>
 #include <string>
 #include <unordered_map>
+#include "types.h"
 
-// ----- Config-Stuct -------------------------
-/**
- * @brief Defines system-wide operational constraints populated during startup.
- * @note Instances are passed by constant reference throughout the application lifecycle.
- */
-struct Config
-{
-    std::string port = "8080";
-    std::string vecdb_file_path = "./data/database.vdb";
-    std::size_t dims = 1024;
-    std::size_t dims_no_of_digits = 4;
-    std::size_t id_length = 32;
-    std::size_t meta_data_length = 32;
-    std::size_t meta_data_pairs = 3;
-};
-// ----- Helper ------------------------------
+// --- Helper
 // Helper to trim spaces, quotes, and carriage returns
 inline std::string trimEnv(const std::string &str)
 {
@@ -31,11 +16,7 @@ inline std::string trimEnv(const std::string &str)
     return str.substr(first, (last - first + 1));
 }
 
-/*
- * Reads the .env file and assigns the found values to the provided references.
- * Returns true if the file was opened successfully, false otherwise.
- */
-// ----- To_call ------------------------------
+// --- To_call
 /**
  * @brief Parses an environment file to populate global operational constraints.
  * @param envFilePath File system path targeting the plain text configuration file
@@ -72,20 +53,14 @@ inline bool loadServerConfig(const std::string &envFilePath, Config &con)
     // Assign to references, safely handling string-to-int conversions
     try
     {
-        if (envMap.count("EMBEDDING_DIMS"))
-            con.dims = std::stoul(envMap["EMBEDDING_DIMS"]);
-        if (envMap.count("DIMENSIONS_NO_OF_DIGITS"))
-            con.dims_no_of_digits = std::stoi(envMap["DIMENSIONS_NO_OF_DIGITS"]);
-        if (envMap.count("ID_LENGTH_SET"))
-            con.id_length = std::stoi(envMap["ID_LENGTH_SET"]);
-        if (envMap.count("META_DATA_LENGTH_SET"))
-            con.meta_data_length = std::stoi(envMap["META_DATA_LENGTH_SET"]);
-        if (envMap.count("META_DATA_KP_PAIRS_SET"))
-            con.meta_data_pairs = std::stoi(envMap["META_DATA_KP_PAIRS_SET"]);
         if (envMap.count("PORT"))
             con.port = (envMap["PORT"]);
-        if (envMap.count("VECDB_DATA_PATH"))
-            con.vecdb_file_path = envMap["VECDB_DATA_PATH"];
+        if (envMap.count("VECDB_ENTRY_DATA_PATH"))
+            con.vecdb_entry_file_path = envMap["VECDB_ENTRY_DATA_PATH"];
+        if (envMap.count("VECDB_TEXT_DATA_PATH"))
+            con.vecdb_text_file_path = envMap["VECDB_TEXT_DATA_PATH"];
+        if (envMap.count("VECDB_INDEX_DATA_PATH"))
+            con.vecdb_index_file_path = envMap["VECDB_INDEX_DATA_PATH"];
     }
     catch (...)
     {
@@ -94,4 +69,5 @@ inline bool loadServerConfig(const std::string &envFilePath, Config &con)
     }
     return true;
 }
+
 #endif // ENV_CONFIG_HPP

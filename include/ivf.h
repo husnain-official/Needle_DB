@@ -8,7 +8,7 @@
 #include <numeric>
 #include <random>
 #include <algorithm>
-
+#include "schema.hpp"
 // --- Abstract Base Class ---
 class Vector_index
 {
@@ -43,7 +43,7 @@ class IVF_index : public Vector_index
 {
 private:
     size_t centroid_count = 0;
-    size_t nprobe = 5; // Number of clusters to search during querying
+    size_t nprobe = schema::MAX_PROBES_SEARCH; // Number of clusters to search during querying
 
     // Flattened 1D array for centroids
     // Accessed via: centroids[centroid_index * dims + d]
@@ -63,10 +63,9 @@ public:
      * @param nprobe Number of adjacent clusters to evaluate during search execution
      * @note Centroid count automatically clamps to total vector count during build
      */
-    IVF_index(size_t nlist = 100, size_t nprobe = 5) : centroid_count(nlist), nprobe(nprobe) {}
+    IVF_index(size_t nlist = schema::MAX_CENTROIDS, size_t nprobe = schema::MAX_PROBES_SEARCH) : centroid_count(nlist), nprobe(nprobe) {}
     ~IVF_index() override = default;
 
-    // Fixed Euclidean distance: Computes squared L2 distance (avoids costly sqrt)
     // Overloaded to accept raw pointers for high-performance tight loops
     /**
      * @brief Computes the squared L2 distance between two contiguous memory blocks.
@@ -76,7 +75,7 @@ public:
      * @return Unrooted scalar representing the squared Euclidean distance
      * @warning Omits the final square root operation for optimization purposes
      */
-    float euclidean_distance(const float *v1, const float *v2, size_t dims) const;
+    float euclidean_distance(const float *v1, const float *v2) const;
     /**
      * @brief Computes the squared L2 distance between two standard vector objects.
      * @param v1 First floating-point sequence
@@ -113,6 +112,13 @@ public:
      * @warning Degrades to an O(N) linear scan across cluster lists to locate the target index
      */
     void delete_(std::size_t index) override;
+    // Helpers
+    void set_ref_store(const Vector_store &store);
+    void set_centroids(std::vector<float> &&loaded_centroids);
+    void build_lists();
+    // Getters
+    const size_t get_built_centroids_number_() const;
+    const float *get_centroids_data_ptr_() const;
 
 private:
     // Helper to find the closest centroid to a given vector

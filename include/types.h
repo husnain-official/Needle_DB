@@ -1,31 +1,10 @@
-
 #ifndef TYPES
 #define TYPES
 #include <string>
 #include <map>
 #include <vector>
+#include "schema.hpp"
 // --- Data-Structures
-/**
- * @brief Fixed-size character arrays storing a single key-value string pair.
- * @note Maximum length for both key and value is 32 bytes.
- * @warning Does not guarantee null termination if strings exactly match the 32-byte limit.
- */
-struct Metadata_entry
-{
-    char key[32];
-    char value[32];
-};
-/**
- * @brief Core memory representation of an embedding and its associated metadata.
- * @note Supports a strict maximum of 3 metadata entries per record.
- */
-struct Vector
-{
-    std::string id;
-    int dims;
-    Metadata_entry metadata[3];
-    std::vector<float> data;
-};
 /**
  * @brief Carrier structure for operation outcomes and diagnostic text.
  */
@@ -34,14 +13,14 @@ struct Parse_result
     bool success;
     std::string message; // Error if failed.
 };
+
 /**
  * @brief Transient record pairing a computed similarity score with its internal memory offset.
  */
 struct Query_result
 {
     float similarity;
-    std::size_t index; // directly realted to database indexes
-                       // to eaily sort the similar vectors
+    std::size_t index; // directly realted to database(RAM or DISK ?) indexes
     /**
      * @brief Compares two search results based strictly on their computed similarity scores.
      * @param other Target result instance to compare against
@@ -52,4 +31,33 @@ struct Query_result
         return (this->similarity > other.similarity);
     }
 };
-#endif
+
+// --- Conversion-Function
+inline bool entry_to_vector(const DB_entry &entry, Vector &vec)
+{
+    try
+    {
+        //  ID:
+        size_t id_size = strnlen(entry.id, schema::ID_LENGTH);
+        vec.id = std::string(entry.id, id_size);
+        //  Text length:
+        vec.text_length = entry.text_length;
+        vec.text_offset = entry.text_offset;
+        //  Meta-Data:
+        vec.meta_data_count = entry.meta_data_count;
+        for (size_t i = 0; i < entry.meta_data_count; ++i)
+        {
+            // Struct assignment automatically and safely copies the internal char[32] arrays
+            vec.meta_data[i] = entry.meta_data[i];
+        }
+        // Embeddings:
+        std::copy(entry.embeddings, entry.embeddings + schema::DIMENSIONS, vec.embeddings.begin());
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        return false;
+    }
+}
+
+#endif // TYPES

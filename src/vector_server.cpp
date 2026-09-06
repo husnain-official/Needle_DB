@@ -60,24 +60,26 @@ void Vector_Server::stop()
 void Vector_Server::run()
 {
     // AUTO-LOAD on startup, Read the data from the database and load into RAM
-    Header h = file_manager.read_header();
+    DB_header h = file_manager.read_header();
     if (h.total_vector_count > 0)
     {
         Parse_result res = vector_store.set_dims_(h.dimensions);
         if (res.success)
         {
             vector_store.clear(); // reset count_(RAM) to 0, clear arrays
-            std::string id_buf;
-            Metadata_entry mdata_arr[3];
-            std::vector<float> embd_buf(h.dimensions);          // use h.dimensions
-            for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records
+            std::string temp_text_str;
+            DB_entry db_entry;
+            Vector vector_store_entry;
+
+            for (uint64_t i = 0; i < h.total_vector_count; i++) // loop over records    // TODO: Specify who is responsible for padding
             {
-                if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
-                    continue;                                         // skip deleted (flag=0) — make_entry won't count these
-                vector_store.make_entry(id_buf, embd_buf, mdata_arr); // increments count_ itself
+                if (!file_manager.read_entry(i, db_entry, temp_text_str))
+                    continue; // skip deleted (flag=0) — make_entry won't count these
+                entry_to_vector(db_entry, vector_store_entry);
+                vector_store.make_entry(vector_store_entry); // increments count_ itself
             }
             std::cout << "Auto-loaded " << vector_store.get_count()
-                      << " vectors (" << h.dimensions << " dims) from disk.\n";
+                      << " live vectors (" << h.dimensions << " dims) from disk.\n";
             // prints LIVE vector count, not total-including-deleted
         }
         else
@@ -89,9 +91,35 @@ void Vector_Server::run()
     {
         std::cout << "No data in database found, starting fresh.\n";
     }
-    // Now we first crete out IVF centroids
+    // Now we first crete out IVF centroids // TODO: In v2, the prebuilt centroids are to be stored in a file, and not created after every bootup
     vector_store.attach_index(&ivf_index_);
-    ivf_index_.build_(vector_store);
+    if (!file_manager.is_index_populated())
+    {
+        ivf_index_.build_(vector_store);
+        size_t centroids_to_save = std::min(size_t(schema::MAX_CENTROIDS), ivf_index_.get_built_centroids_number_());
+        const float *centroids_ptr = ivf_index_.get_centroids_data_ptr_();
+        file_manager.write_index_(centroids_ptr, centroids_to_save);
+    }
+    else
+    {
+        // new logic comes here now.
+        // first we set the store, in the index file.
+        ivf_index_.set_ref_store(vector_store);
+        size_t centroids_to_copy = file_manager.get_index_size() / (schema::DIMENSIONS * sizeof(float));
+        if (centroids_to_copy == 0) // if the index file size is 0, we rebuild, file exists with no data.
+        {
+            std::cerr << "[Server]  |   WARNING: Index file present but unusable -- rebuilding from scratch.\n";
+            ivf_index_.build_(vector_store);
+            size_t centroids_to_save = ivf_index_.get_built_centroids_number_();
+            file_manager.write_index_(ivf_index_.get_centroids_data_ptr_(), centroids_to_save);
+        }
+        else // valid data inside index_ file.
+        {
+            ivf_index_.set_centroids(file_manager.read_index_(centroids_to_copy));
+            // centroids have been set now, the indexes have to be assigned(lists have to be created)
+            ivf_index_.build_lists();
+        }
+    }
     // Now we allow our port to listen
     if ((listen(server_fd, BACKLOG)) == -1)
     {
@@ -105,6 +133,8 @@ void Vector_Server::run()
     int client_fd;
     while (true)
     {
+        // If we have multiple accept's then we can have multiple handle_clients().
+        // 1.   |   Main-Thereaded-Accept
         client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
         if (client_fd == -1)
         {
@@ -112,12 +142,16 @@ void Vector_Server::run()
             continue;
         }
         std::cout << "Client connected successfully.\n";
-        handle_client(client_fd);
+        // 2.   |   Per-Client-Thread
+        // handle_client(client_fd);
+        std::thread client_thread(&Vector_Server::handle_client, this, client_fd);
+        // 3.   |   Detach the client thread from the main-thread
+        client_thread.detach();
     }
 }
 void Vector_Server::handle_client(int client_fd)
 {
-    int buffer_len = 16384; // one entry is approximately 4kB
+    int buffer_len = 16384; // one entry is approximately 5.4kB
     int64_t bytes_recv = 0;
     char buffer[buffer_len];
     std::string accumulator; // will accumulate the buffer over all recv calls unitl a '\n'
@@ -154,188 +188,267 @@ void Vector_Server::handle_client(int client_fd)
 
             // std::cout << "Received: " << command << std::endl;
             //------------All Commands Conditionals-----------------
-            if ((command.rfind("INSERT", 0)) == 0) // INSERT ID DIMS key1=abc key2=def key3=xyz F1 F2 F3 ... Fn
+            if ((command.rfind("INSERT", 0)) == 0) // INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
             {
-                Vector v;
-                Parse_result results = insert_parsing(v, command, con);
+                bool insert_failed = false;
+                std::string error_message;
+
+                Vector vector_entry;
+                DB_entry entry;
+                std::string text;
+
+                Parse_result results = parser.insert_parsing(entry, text, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (vector_store.id_exists(v.id))
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
                 {
-                    results.message = "WARNING <Id already exists in database>\n";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    std::lock_guard<std::mutex> lock(store_mutex_);
+
+                    if (vector_store.id_exists(entry.id))
+                    {
+                        error_message = "WARNING <Id already exists in database>\n";
+                        insert_failed = true;
+                    }
+                    else if (!vector_store.normalise_vector(entry.embeddings))
+                    {
+                        error_message = "ERROR <Vector Normalization Failed>\n";
+                        insert_failed = true;
+                    }
+                    else if (!file_manager.write_entry(entry, text))
+                    {
+                        error_message = "ERROR <Entry Writing Failed>\n";
+                        insert_failed = true;
+                    }
+                    else
+                    {
+                        if (!entry_to_vector(entry, vector_entry))
+                        {
+                            error_message = "ERROR <'DB_entry' to 'Vector' conversion Failed>\n";
+                            insert_failed = true;
+                        }
+                        else
+                        {
+                            vector_store.make_entry(vector_entry); // update both RAM and  index_(internally).
+                        }
+                    }
+                } // --- lock-ends-here ---, NOTE: .send() is not shared, therefore 1 single client conncection will not slow the entire server.
+                if (insert_failed)
+                {
+                    send(client_fd, error_message.data(), error_message.length(), 0);
                     continue;
                 }
-                if (!vector_store.normalise_vector(v.data))
-                {
-                    results.message = "ERROR <Vector Normalization Failed>\n";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                if (!file_manager.write_vector(v.id, v.data.data(), v.metadata))
-                {
-                    results.message = "ERROR <Vector Writing Failed>\n";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                vector_store.make_entry(v.id, v.data, v.metadata); // update the RAM as well.
-                // Notify IVF of the new entry (count_ just incremented, so index = count-1)
-                // if (vector_store.get_count() > 0)
-                //     ivf_index_.add_(vector_store.get_count() - 1);
                 results.message = "INSERT <Successful>\n";
-                results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
-            else if ((command.rfind("QUERY", 0)) == 0) // QUERY TOP-K DIMS key1=abc key2=def key3=xyz F1 F2 ... Fn
+            else if ((command.rfind("QUERY", 0)) == 0)
             {
                 Vector query_v;
                 size_t top_k = 0;
-                Parse_result results = query_parsing(query_v, top_k, command, con);
+                Parse_result results = parser.query_parsing(query_v, top_k, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                if (!vector_store.normalise_vector(query_v.data))
-                {
-                    results.message = "ERROR <Vector Normalization Failed>\n";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                //
-                std::vector<size_t> matching_index;
-                results = vector_store.get_matching_indices(query_v.metadata, matching_index);
-                if (!results.success)
-                {
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                // 0. setup necessary variables
-                std::vector<std::size_t> index;
-                index.reserve(top_k);
+
+                // Note: to not make send() in a locked state we first copy all the data into local variables, local to all individual threads
                 std::vector<std::string> id;
                 std::vector<float> similarities;
-                similarities.reserve(top_k); // push_back now fills from position 0
-                // 1. Use ivf, if failed fallback to brute force
-                std::vector<size_t> ivf_candidates = ivf_index_.search_(query_v, top_k);
-                if (!ivf_candidates.empty())
+                std::vector<std::string> texts;
+                bool query_failed = false;
+                std::string error_message;
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
                 {
-                    // Intersect ivf_candidates with matching_index (metadata filter)
-                    std::vector<size_t> filtered;
-                    for (size_t c : ivf_candidates)
+                    std::lock_guard<std::mutex> lock(this->store_mutex_);
+
+                    if (!vector_store.normalise_vector(query_v.embeddings))
                     {
-                        if (matching_index.empty() ||
-                            std::find(matching_index.begin(), matching_index.end(), c) != matching_index.end())
-                            filtered.push_back(c);
+                        error_message = "ERROR <Vector Normalization Failed>\n";
+                        query_failed = true;
                     }
-                    // Use filtered as the candidate pool — pass as matching_index override
-                    vector_store.return_k_most_similar(query_v, top_k, index, similarities, filtered.empty() ? &matching_index : &filtered);
+                    else
+                    {
+                        std::vector<size_t> matching_index;
+                        results = vector_store.get_matching_indices(query_v.meta_data, query_v.meta_data_count, matching_index);
+                        if (!results.success)
+                        {
+                            error_message = results.message;
+                            query_failed = true;
+                        }
+                        else
+                        {
+                            std::vector<std::size_t> index;
+                            index.reserve(top_k);
+                            similarities.reserve(top_k);
+
+                            std::vector<size_t> ivf_candidates = ivf_index_.search_(query_v, top_k);
+                            if (!ivf_candidates.empty())
+                            {
+                                std::vector<size_t> filtered;
+                                for (size_t c : ivf_candidates)
+                                {
+                                    if (matching_index.empty() or
+                                        std::find(matching_index.begin(), matching_index.end(), c) != matching_index.end())
+                                        filtered.push_back(c);
+                                }
+                                vector_store.return_k_most_similar(query_v, top_k, index, similarities, filtered.empty() ? &matching_index : &filtered);
+                            }
+                            else
+                                vector_store.return_k_most_similar(query_v, top_k, index, similarities, &matching_index);
+
+                            if (!vector_store.read_all_ids(id, index, top_k))
+                            {
+                                error_message = "ERROR <[Vector-Store] Failed to read similar id's.>\n";
+                                query_failed = true;
+                            }
+                            else
+                            {
+                                texts.resize(top_k);
+                                for (size_t i = 0; i < top_k; i++)
+                                {
+                                    size_t text_length = vector_store.get_text_length(index[i]);
+                                    size_t text_offset = vector_store.get_text_offset(index[i]);
+                                    if (!file_manager.read_text(text_length, text_offset, texts[i]))
+                                        texts[i].clear(); // mark as unreadable, handle below
+                                }
+                            }
+                        }
+                    }
+                } // --- lock ends here ---
+                if (query_failed)
+                {
+                    send(client_fd, error_message.data(), error_message.length(), 0);
+                    continue;
                 }
-                else
-                    vector_store.return_k_most_similar(query_v, top_k, index, similarities, &matching_index);
-                // now return the id's of top_k similar vectors
                 results.message = ("QUERY <" + std::to_string(top_k) + ">\n");
                 send(client_fd, results.message.data(), results.message.length(), 0);
-                vector_store.read_all_ids(id, index, top_k);
-                for (size_t i = 0; i < top_k; i++) // display each output FORMAT: id score\n
+
+                for (size_t i = 0; i < top_k; i++)
                 {
-                    results.message = id[i] + " " + std::to_string(similarities[i]) + "\n";
+                    if (texts[i].empty()) // sentinel for read_text failure above
+                    {
+                        results.message = "ERROR <SKIPPING possible match, Flag mismatch of text and entry. '" + id[i] + "'>";
+                        send(client_fd, results.message.data(), results.message.length(), 0);
+                        continue;
+                    }
+                    results.message = id[i] + " " + std::to_string(similarities[i]) + " " + texts[i] + "\n";
                     send(client_fd, results.message.data(), results.message.length(), 0);
                 }
                 send(client_fd, "END\n", 4, 0);
                 continue;
             }
-            else if ((command.rfind("DELETE", 0)) == 0) // DELETE ID_NAME
+            else if ((command.rfind("DELETE", 0)) == 0) // DELETE <id>
             {
+                std::string error_message;
+                bool delete_failed = false;
+
                 std::string id = "";
                 Parse_result results;
-                results = delete_parsing(id, command, con);
+
+                results = parser.delete_parsing(id, command);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                int64_t index = -1;
-                index = file_manager.find_by_id(id);
-                if (index == -1)
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
                 {
-                    results.message = "ERROR <Could not find vector>\n";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    std::lock_guard<std::mutex> lock(store_mutex_);
+
+                    int64_t index = -1;
+                    index = file_manager.find_by_id(id);
+                    if (index == -1)
+                    {
+                        error_message = "ERROR <Could not find vector to delete in Database>\n";
+                        delete_failed = true;
+                    }
+                    else if (!file_manager.delete_entry(static_cast<uint64_t>(index)))
+                    {
+                        error_message = "ERROR <Could not delete vector(Database)\n>";
+                        delete_failed = true;
+                    }
+                    else if (!vector_store.remove_entry(id))
+                    {
+                        error_message = "ERROR <Could not delete vector(Memory)\n>";
+                        delete_failed = true;
+                    }
+                }
+                if (delete_failed)
+                {
+                    send(client_fd, error_message.data(), error_message.length(), 0);
                     continue;
                 }
-                if (!file_manager.delete_vector(static_cast<uint64_t>(index)))
-                {
-                    results.message = "ERROR <Could not delete vector(Database)\n>";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                // Get RAM index before removing (needed for IVF)
-                Parse_result idx_res = vector_store.get_index_in_ram(id);
-                size_t ram_idx = idx_res.success ? std::stoul(idx_res.message) : SIZE_MAX;
-                if (!vector_store.remove_entry(id))
-                {
-                    results.message = "ERROR <Could not delete vector(Memory)\n>";
-                    send(client_fd, results.message.data(), results.message.length(), 0);
-                    continue;
-                }
-                if (ram_idx != SIZE_MAX)
-                    ivf_index_.delete_(ram_idx);
                 results.message = "DELETE <Successful>\n";
-                results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
             }
             else if ((command.rfind("SAVE", 0)) == 0) // SAVE
             {
                 Parse_result results;
-                results = save_parsing(command, 0, con);
+                results = parser.save_parsing(command, 0);
                 if (!results.success)
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
+                {
+                    std::lock_guard<std::mutex> lock(store_mutex_);
+                    file_manager.flush_header();
+                }
                 results.message = "SAVE <Successful>\n";
-                results.message = "OK\n";
-                file_manager.flush_header();
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
             else if ((command.rfind("LOAD", 0)) == 0) // LOAD
             {
+                std::string error_message;
+                bool load_failed = false;
                 Parse_result results;
-                results = save_parsing(command, 1, con);
+                results = parser.save_parsing(command, 1);
                 if (!results.success) // save and load -> 4 chars same logic
                 {
                     send(client_fd, results.message.data(), results.message.length(), 0);
                     continue;
                 }
-                // do load things
-                { // as this is the connection point for all three classes, code will be here
-                    Header h = file_manager.read_header();
-                    results = vector_store.set_dims_(h.dimensions);
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
+                {
+                    std::lock_guard<std::mutex> lock(store_mutex_);
+
+                    // DB_header h = file_manager.read_header();
+                    results = vector_store.set_dims_(schema::DIMENSIONS);
                     if (!results.success)
                     {
-                        send(client_fd, results.message.data(), results.message.length(), 0);
-                        continue;
+                        error_message = results.message;
+                        load_failed = true;
                     }
-                    vector_store.clear();
-                    // read and write
-                    std::string id_buf;
-                    std::vector<float> embd_buf(vector_store.get_dims());
-                    Metadata_entry mdata_arr[h.max_kv];
-                    for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
+                    else
                     {
-                        if (!file_manager.read_vector(i, id_buf, embd_buf.data(), mdata_arr))
-                            continue;                                         // skip deleted (flag=0) or bad records
-                        vector_store.make_entry(id_buf, embd_buf, mdata_arr); // this increments count itself
+                        vector_store.clear();
+                        // read and write
+                        std::string text;
+                        DB_entry entry;
+                        Vector vec_entry;
+                        for (uint64_t i = 0; i < file_manager.get_total_vector_count(); i++)
+                        {
+                            text.clear();
+                            if (!file_manager.read_entry(i, entry, text))
+                                continue;
+                            entry_to_vector(entry, vec_entry);
+                            vector_store.make_entry(vec_entry);
+                        }
+                        ivf_index_.build_(vector_store);
                     }
-                    ivf_index_.build_(vector_store);
+                }
+                if (load_failed)
+                {
+                    send(client_fd, error_message.data(), error_message.length(), 0);
+                    continue;
                 }
                 results.message = "LOAD <Successful>\n";
-                results.message = "OK\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             } // 'load' end

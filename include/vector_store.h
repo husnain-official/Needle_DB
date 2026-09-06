@@ -5,6 +5,7 @@
 #include <cstring>
 #include <map>
 #include <iostream>
+#include <span>
 #include <cmath>            // for sqrt
 #include <algorithm>        // for std::sort and std::partial sort
 #include <numeric>          // for std::inner_product (highly optimised dot-product)
@@ -12,7 +13,7 @@
 #include <cstdint>          // for uint64_t
 #include "types.h"          // for convinient structs
 #include "similarities.hpp" // for similarity functions
-#include "env_config.hpp"
+#include "schema.hpp"
 // #include "ivf.h"            // for ivf data
 
 // --Index-Creation
@@ -24,32 +25,32 @@ class Vector_store
     std::vector<std::string> ids_;
     std::vector<float> embeddings_;
     std::map<std::string, std::map<std::string, std::string>> metadata_;
-    std::size_t dims_;
-    std::size_t count_;
+    std::vector<size_t> text_lengths_;
+    std::vector<size_t> text_offsets_;
+    std::size_t dims_ = schema::DIMENSIONS;
+    std::size_t count_ = 0;
     Vector_index *index_ = nullptr;
-    // THe pre-set configrations from .env
-    const Config conditions;
 
 public:
     /**
      * @brief Initializes the memory storage engine using immutable environment parameters.
      * @param con Loaded configuration struct dictating operational constraints
      */
-    Vector_store(const Config con) : conditions(con), dims_(con.dims), count_(0) {}
+    Vector_store() {}
     ~Vector_store() {}
     // Getters
-    const float *get_embedding(size_t i) const;
-    const std::string &get_id(size_t i) const;
-    const std::size_t get_dims() const;
+    const float *get_embedding(const size_t i) const;
+    const std::string &get_id(const size_t i) const;
     const std::size_t get_count() const;
-    Parse_result get_metadata_entry() const;
+    const std::size_t get_text_length(const size_t i) const;
+    const std::size_t get_text_offset(const size_t i) const;
     /**
      * @brief Locates the internal flat array offset of a specific vector identifier.
      * @param id Unique 32-character maximum string identifier
      * @return Success state containing stringified integer index or an error message
      * @warning Executes an unoptimized linear O(N) scan across all stored IDs
      */
-    Parse_result get_index_in_ram(const std::string &);
+    const int64_t get_index_in_ram(const std::string &) const;
     /**
      * @brief Filters stored vectors against required key-value metadata pairs.
      * @param mdata_arr Array containing up to 3 metadata conditional constraints
@@ -57,7 +58,7 @@ public:
      * @return Success state indicating the outcome of the filtering operation
      * @note Empty query keys act as wildcards matching all active entries
      */
-    Parse_result get_matching_indices(const Metadata_entry *, std::vector<size_t> &);
+    Parse_result get_matching_indices(const Metadata_entry *, const size_t &, std::vector<size_t> &);
     Vector_index *get_index() const;
     // Setters
     /**
@@ -93,7 +94,7 @@ public:
      * @note Automatically propagates the insertion to the attached IVF index
      * @warning Assumes duplicate ID validation has already occurred prior to invocation
      */
-    void make_entry(const std::string, std::vector<float>, const Metadata_entry *);
+    void make_entry(const Vector &);
     /**
      * @brief Executes an O(1) swap-and-pop deletion of a vector from memory.
      * @param id Target vector identifier to permanently remove
@@ -115,6 +116,7 @@ public:
      * @warning Mutates the provided vector directly without allocating a copy
      */
     bool normalise_vector(std::vector<float> &);
+    bool normalise_vector(float *);
     /**
      * @brief Resolves raw integer memory indices back into their string identifiers.
      * @param read_ids Output array populated with the mapped string identifiers
@@ -129,7 +131,8 @@ public:
      * @return True if located in the memory map, false otherwise
      * @warning Executes an unoptimized linear O(N) scan across the ID array
      */
-    bool id_exists(std::string &);
+    bool id_exists(const std::string &) const;
+    bool id_exists(const char *) const;
 
     //  Search-functions
     /**

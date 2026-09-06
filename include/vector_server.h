@@ -16,6 +16,10 @@
 #include <string>
 #include <cstring>
 #include <iostream>
+#include <thread>
+#include <shared_mutex>
+#include <mutex>
+#include "schema.hpp"       // for schema-refrence
 #include "vector_store.h"   // for RAM updates/access
 #include "file_manager.h"   // for file/database updates/access
 #include "similarities.hpp" // for similarity searches
@@ -59,6 +63,8 @@ private:
     int server_fd;
     const Config con;
     std::string port_num;
+    Parser parser = Parser{};
+    std::mutex store_mutex_;
     /**
      * @brief Processes and executes line-delimited text commands from an active socket.
      * @param client_fd Open file descriptor bound to the communicating client
@@ -69,7 +75,7 @@ private:
     // Vector_server is dependent upon both, vector_store and file_manager
     Vector_store &vector_store;
     File_manager &file_manager;
-    IVF_index ivf_index_{100, 5};
+    IVF_index ivf_index_{};
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
 // use a guide to fully understand this prebuilt code.
