@@ -21,7 +21,7 @@ public:
      * @warning Throws std::runtime_error if an existing file schema mismatches configuration
      * @warning Will recreate both databases, if one or both are missing.
      */
-    explicit File_manager(const std::string &path, const std::string &text_path);
+    explicit File_manager(const std::string &path, const std::string &text_path, const std::string &index_path);
 
     // --- Core operations — all O(1) with fixed record size, except find by id O(n) and compact O(n)
     /**
@@ -62,6 +62,9 @@ public:
      * @return True if the disk update succeeds, false otherwise
      */
     bool compact();
+    std::vector<float> read_index_(const size_t centroid_numbers);
+    bool write_index_(const float *centroids_ptr, const size_t centroid_numbers);
+    size_t get_index_size();
 
     // --- Header I/O
     /**
@@ -79,12 +82,15 @@ public:
     // --- Helpers/getters
     size_t get_live_vector_count() const;
     size_t get_total_vector_count() const;
+    bool is_index_populated() const;
 
 private:
     std::fstream file_;
     std::fstream text_file_;
+    std::fstream index_file_;
     const std::string path_;
     const std::string text_file_path_;
+    const std::string index_file_path_;
     DB_header header_;
     size_t record_size_;
     /**

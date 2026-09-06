@@ -59,6 +59,8 @@ inline bool loadServerConfig(const std::string &envFilePath, Config &con)
             con.vecdb_entry_file_path = envMap["VECDB_ENTRY_DATA_PATH"];
         if (envMap.count("VECDB_TEXT_DATA_PATH"))
             con.vecdb_text_file_path = envMap["VECDB_TEXT_DATA_PATH"];
+        if (envMap.count("VECDB_INDEX_DATA_PATH"))
+            con.vecdb_index_file_path = envMap["VECDB_INDEX_DATA_PATH"];
     }
     catch (...)
     {

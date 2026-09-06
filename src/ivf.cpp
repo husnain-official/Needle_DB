@@ -165,7 +165,7 @@ void IVF_index::delete_(std::size_t index)
     }
 }
 
-// Helper to find the closest centroid to a given vector
+// Helpers
 size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
 {
     float best_dist = std::numeric_limits<float>::max();
@@ -181,4 +181,37 @@ size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
         }
     }
     return best_idx;
+}
+void IVF_index::set_ref_store(const Vector_store &store)
+{
+    this->store_ref = &store;
+}
+void IVF_index::set_centroids(std::vector<float> &&loaded_centroids)
+{
+    this->centroids = std::move(loaded_centroids);
+    this->centroid_count = this->centroids.size() / schema::DIMENSIONS;
+}
+void IVF_index::build_lists()
+{
+    if (centroid_count == 0 or !store_ref)
+        return;
+
+    lists.clear();
+    lists.resize(this->centroid_count);
+    // Assign all vectors to their nearest centroid
+    size_t count = store_ref->get_count();
+    for (size_t i = 0; i < count; i++)
+    {
+        const float *vec = store_ref->get_embedding(i);
+        size_t best_c = find_nearest_centroid(vec, schema::DIMENSIONS);
+        lists[best_c].push_back(i);
+    }
+}
+const size_t IVF_index::get_built_centroids_number_() const
+{
+    return this->centroid_count;
+}
+const float *IVF_index::get_centroids_data_ptr_() const
+{
+    return this->centroids.data();
 }

@@ -75,7 +75,7 @@ private:
     // Vector_server is dependent upon both, vector_store and file_manager
     Vector_store &vector_store;
     File_manager &file_manager;
-    IVF_index ivf_index_{100, 5};
+    IVF_index ivf_index_{};
 };
 //  -----------Both below structs are for refrence only, and are predefined.-------------
 // use a guide to fully understand this prebuilt code.

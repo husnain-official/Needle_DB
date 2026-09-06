@@ -18,7 +18,7 @@ int main()
     // ----------------------Declare All Components-------------------------
     Vector_store database{};
     // Configure Database
-    File_manager file_handler(env.vecdb_entry_file_path, env.vecdb_text_file_path);
+    File_manager file_handler(env.vecdb_entry_file_path, env.vecdb_text_file_path, env.vecdb_index_file_path);
     // Configure Server
     Vector_Server server(env.port, database, file_handler, env);
 

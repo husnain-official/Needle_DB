@@ -43,7 +43,7 @@ class IVF_index : public Vector_index
 {
 private:
     size_t centroid_count = 0;
-    size_t nprobe = 5; // Number of clusters to search during querying
+    size_t nprobe = schema::MAX_PROBES_SEARCH; // Number of clusters to search during querying
 
     // Flattened 1D array for centroids
     // Accessed via: centroids[centroid_index * dims + d]
@@ -63,7 +63,7 @@ public:
      * @param nprobe Number of adjacent clusters to evaluate during search execution
      * @note Centroid count automatically clamps to total vector count during build
      */
-    IVF_index(size_t nlist = 100, size_t nprobe = 5) : centroid_count(nlist), nprobe(nprobe) {}
+    IVF_index(size_t nlist = schema::MAX_CENTROIDS, size_t nprobe = schema::MAX_PROBES_SEARCH) : centroid_count(nlist), nprobe(nprobe) {}
     ~IVF_index() override = default;
 
     // Overloaded to accept raw pointers for high-performance tight loops
@@ -112,6 +112,13 @@ public:
      * @warning Degrades to an O(N) linear scan across cluster lists to locate the target index
      */
     void delete_(std::size_t index) override;
+    // Helpers
+    void set_ref_store(const Vector_store &store);
+    void set_centroids(std::vector<float> &&loaded_centroids);
+    void build_lists();
+    // Getters
+    const size_t get_built_centroids_number_() const;
+    const float *get_centroids_data_ptr_() const;
 
 private:
     // Helper to find the closest centroid to a given vector

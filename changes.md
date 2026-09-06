@@ -15,10 +15,31 @@
 9. Cleaned up file_manager.h/cpp
 10. 
 
-### Persistence of ivf centroids(next commit, not this one)
+### Persistence of ivf centroids
+1. 
+* **Fixed critical truncation bug:** Prevented accidental wiping of existing database files in the `File_manager` constructor when only a single file (like the index) was missing.
+* **Decoupled index file logic:** The index file is now treated as a recoverable, secondary asset that will silently recreate itself if missing, preserving primary data files.
+* **Added strict corruption safeguards:** Added an exclusive-OR check (`entry_exists != text_exists`) to throw a runtime error if the core database files are in a partial or corrupted state.
+2. 
+* **Added index state detection:** Implemented `is_index_populated()` in `File_manager` using `std::filesystem::is_empty` to detect 0-byte (uninitialized) index files.
+* **Integrated auto-rebuild on boot:** Updated server initialization logic to dynamically route between building a new IVF index from the vector store or loading pre-calculated centroids from disk based on the index file's size.
+3. 
+* **Centralized hardcoded schema variables:** Extracted `MAX_CENTROIDS` and `MAX_PROBES_SEARCH` into the `schema` namespace and updated the `IVF_index` constructor to use them as default parameters.
+* **Implemented index deserialization:** Added `populate_index_` in `File_manager` to read centroid data directly from the binary file into memory.
+* **Integrated fast-load server routing:** Updated the server boot sequence to calculate required centroid dimensions and load existing indices directly from disk into `IVF_index` using move semantics.
+4. 
+* **Added index persistence:** Implemented `write_index_` and `read_index_` in `File_manager` for saving and loading the calculated IVF centroids to/from the binary index file.
+* **Integrated list rebuilding:** Added `build_lists()` in `IVF_index` to re-assign existing vector embeddings to the loaded centroids on server boot-up.
+* **Added safe memory management:** Implemented strict `sizeof(float)` byte calculations for binary I/O operations and ensured the inverted `lists` array is safely resized prior to index rebuilding.
+5. 
+made it such, if the index files size is 0, the server will recreate the indexes, and save them.
 
 
 
+
+
+
+### NOTES are just my thoughts not what i have implemented yet.
 NOTE:1  |   Types.hpp cleaned, now only has 2 structs(Query_result, Parse_result), and one conversion function which copies data from a 'Entry' struct to a 'Vector' struct
 
 NOTE:2  |   'Vector' struct in schema.hpp has no doxy. 
@@ -33,7 +54,7 @@ NOTE:6  |   File_manager.find_by_id() is a O(n) function as the database is not 
 
 NOTE:7  |   File_manager.compact(), also needs stored safety conditions, maybe v2 or v3.
 NOTE:8  |   Vector_server needs new doxy
-NOTE:9  |  
+NOTE:9  |   I will just make the ivf centroids persistent and stop the automatic deletion of databases then i am done with the engine side of this project.
 
 
 

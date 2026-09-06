@@ -18,6 +18,8 @@ namespace schema
     constexpr uint8_t VERSION = 6;
     constexpr char MAGIC_NUMBER[4] = {'V', 'D', 'B', '\0'};
     constexpr uint8_t MAX_K_SIMILAR = 30;
+    constexpr uint8_t MAX_CENTROIDS = 100;
+    constexpr uint8_t MAX_PROBES_SEARCH = 5;
 }
 
 /**
@@ -33,6 +35,7 @@ struct Config
     std::string port = "8080";
     std::string vecdb_entry_file_path = "./data/database_entry.vdb";
     std::string vecdb_text_file_path = "./data/database_text.vdb";
+    std::string vecdb_index_file_path = "./data/database_index.vdb";
 };
 
 //  ---------------------------------------- Data-Base-Schema ----------------------------------------

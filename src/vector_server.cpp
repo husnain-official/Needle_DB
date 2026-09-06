@@ -92,8 +92,34 @@ void Vector_Server::run()
         std::cout << "No data in database found, starting fresh.\n";
     }
     // Now we first crete out IVF centroids // TODO: In v2, the prebuilt centroids are to be stored in a file, and not created after every bootup
-    vector_store.attach_index(&ivf_index_); // A better decision will be to move this into a composition with vector_store, constructor of vector_store also creates a ivf_index.
-    ivf_index_.build_(vector_store);
+    vector_store.attach_index(&ivf_index_);
+    if (!file_manager.is_index_populated())
+    {
+        ivf_index_.build_(vector_store);
+        size_t centroids_to_save = std::min(size_t(schema::MAX_CENTROIDS), ivf_index_.get_built_centroids_number_());
+        const float *centroids_ptr = ivf_index_.get_centroids_data_ptr_();
+        file_manager.write_index_(centroids_ptr, centroids_to_save);
+    }
+    else
+    {
+        // new logic comes here now.
+        // first we set the store, in the index file.
+        ivf_index_.set_ref_store(vector_store);
+        size_t centroids_to_copy = file_manager.get_index_size() / (schema::DIMENSIONS * sizeof(float));
+        if (centroids_to_copy == 0) // if the index file size is 0, we rebuild, file exists with no data.
+        {
+            std::cerr << "[Server]  |   WARNING: Index file present but unusable -- rebuilding from scratch.\n";
+            ivf_index_.build_(vector_store);
+            size_t centroids_to_save = ivf_index_.get_built_centroids_number_();
+            file_manager.write_index_(ivf_index_.get_centroids_data_ptr_(), centroids_to_save);
+        }
+        else // valid data inside index_ file.
+        {
+            ivf_index_.set_centroids(file_manager.read_index_(centroids_to_copy));
+            // centroids have been set now, the indexes have to be assigned(lists have to be created)
+            ivf_index_.build_lists();
+        }
+    }
     // Now we allow our port to listen
     if ((listen(server_fd, BACKLOG)) == -1)
     {

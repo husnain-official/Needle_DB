@@ -1,12 +1,33 @@
 #include "file_manager.h"
 // --- Constructor
-File_manager::File_manager(const std::string &path, const std::string &text_path) : path_(path), text_file_path_(text_path)
+File_manager::File_manager(const std::string &path, const std::string &text_path, const std::string &index_path) : path_(path), text_file_path_(text_path), index_file_path_(index_path)
 {
     // 1. Initilize elements of 'File_manager' instance being created.
     header_ = DB_header(); // Create a instance of a 'Header' with pre-filled data, from 'schema.hpp'.
     record_size_ = sizeof(DB_entry);
-    // 2. If no file, then create it and write 'header_' to it, else just open it and read 'header_'.
-    if ((!std::filesystem::exists(path)) or (!std::filesystem::exists(text_path)))
+    // 2.
+    //  If any one of the text or entry files is not present then we throw, both are independent data sources.
+    //  If both are not present we recreate them and write header_.
+    //  Index file, is a depended data, its just efficiency tool, if its not found, dont throw error, just remake it, at load it will be refilled.
+    bool entry_exists = std::filesystem::exists(path);
+    bool text_exists = std::filesystem::exists(text_path);
+    bool index_exists = std::filesystem::exists(index_path);
+
+    if (!index_exists)
+    {
+        this->index_file_.open(index_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!index_file_.is_open())
+            throw std::runtime_error("[File_manager()] | Cannot create DB index file: " + index_path);
+        std::cout << "[File_manager()] | Index-Data-Base Created\n";
+    }
+    else
+        index_file_.open(index_path, std::ios::in | std::ios::out | std::ios::binary);
+
+    if (entry_exists != text_exists)
+    {
+        throw std::runtime_error("[File_manager()] | Database corruption: Some DB files are missing while others exist. Please check your DB directory.");
+    }
+    if ((!entry_exists) and (!text_exists))
     {
         this->file_.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
         if (!(file_.is_open()))
@@ -23,10 +44,13 @@ File_manager::File_manager(const std::string &path, const std::string &text_path
         file_.open(path, std::ios::in | std::ios::out | std::ios::binary);
         text_file_.open(text_path, std::ios::in | std::ios::out | std::ios::binary);
     }
+
     if (!file_.is_open())
         throw std::runtime_error("[File_manager()] | Cannot open DB entry file: " + path);
     if (!text_file_.is_open())
         throw std::runtime_error("[File_manager()] | Cannot open DB text file: " + text_path);
+    if (!index_file_.is_open())
+        throw std::runtime_error("[File_manager()] | Cannot open DB index file: " + index_path);
     header_ = read_header();
     // 3. Check if schema matches, else throw error.
     if (std::strncmp(header_.magic_number, schema::MAGIC_NUMBER, 4) != 0)
@@ -88,6 +112,10 @@ bool delete_file(const std::string &filepath)
         return false;
     }
     return success;
+}
+bool File_manager::is_index_populated() const
+{
+    return !(std::filesystem::is_empty(index_file_path_));
 }
 // --- Core-Operations
 bool File_manager::write_entry(DB_entry &entry, std::string &text)
@@ -304,4 +332,40 @@ long File_manager::find_by_id(const std::string &id)
         }
     }
     return -1;
+}
+std::vector<float> File_manager::read_index_(const size_t centroid_numbers)
+{
+    size_t total_floats = centroid_numbers * schema::DIMENSIONS;
+    size_t total_bytes = total_floats * sizeof(float);
+    index_file_.clear();
+    index_file_.seekg(0, std::ios::beg);
+    std::vector<float> centroids(total_floats, 0.0f);
+    index_file_.read(reinterpret_cast<char *>(centroids.data()), total_bytes);
+    if (!index_file_.good())
+        return {};
+    else
+        return centroids;
+}
+bool File_manager::write_index_(const float *centroids_ptr, const size_t centroid_numbers)
+{
+    size_t total_floats = centroid_numbers * schema::DIMENSIONS;
+    size_t total_bytes = total_floats * sizeof(float);
+    index_file_.clear();
+    index_file_.seekp(0, std::ios::beg);
+    index_file_.write(reinterpret_cast<const char *>(centroids_ptr), total_bytes);
+    index_file_.flush();
+    return index_file_.good();
+}
+size_t File_manager::get_index_size()
+{
+    try
+    {
+        std::uintmax_t size = std::filesystem::file_size(index_file_path_);
+        return size;
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+        std::cerr << "Error: " << e.what() << '\n';
+        return 0;
+    }
 }
