@@ -20,6 +20,9 @@ namespace schema
     constexpr uint8_t MAX_K_SIMILAR = 30;
     constexpr uint8_t MAX_CENTROIDS = 100;
     constexpr uint8_t MAX_PROBES_SEARCH = 5;
+    constexpr uint16_t OPTIMIZE_REM_STARTS_AT = 500;
+    constexpr uint8_t OPTIMIZE_FACTOR = 2;
+    constexpr uint8_t DELETE_FACTOR = 8;
 }
 
 /**

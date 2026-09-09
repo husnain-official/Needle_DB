@@ -63,7 +63,7 @@ private:
     int server_fd;
     const Config con;
     std::string port_num;
-    Parser parser = Parser{};
+    size_t last_build_at = 0;
     std::mutex store_mutex_;
     /**
      * @brief Processes and executes line-delimited text commands from an active socket.
@@ -73,6 +73,7 @@ private:
      */
     void handle_client(int client_fd);
     // Vector_server is dependent upon both, vector_store and file_manager
+    Parser parser = Parser{};
     Vector_store &vector_store;
     File_manager &file_manager;
     IVF_index ivf_index_{};

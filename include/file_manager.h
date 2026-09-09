@@ -62,9 +62,12 @@ public:
      * @return True if the disk update succeeds, false otherwise
      */
     bool compact();
+    bool compact_allowed();
     std::vector<float> read_index_(const size_t centroid_numbers);
     bool write_index_(const float *centroids_ptr, const size_t centroid_numbers);
     size_t get_index_size();
+    uint64_t read_index_last_build();
+    bool write_index_last_build(uint64_t);
 
     // --- Header I/O
     /**

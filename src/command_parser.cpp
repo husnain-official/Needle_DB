@@ -511,6 +511,19 @@ Parse_result Parser::save_parsing(std::string &command, bool state)
         return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
     }
 }
+Parse_result Parser::optimize_parsing(std::string &command)
+{
+    try
+    {
+        if (command.substr(0, 8) != "OPTIMIZE")
+            return {false, "ERROR <Invalid format for OPTIMIZE>\n"};
+        return {true, ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
+    }
+}
 
 // --- Helpers
 void Parser::next_space_changes(const std::string &command, const std::size_t &index, std::size_t &next_space_index, std::size_t &to_move)

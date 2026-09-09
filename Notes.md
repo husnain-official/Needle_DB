@@ -2,10 +2,29 @@
 1. I think the compact() function is not in use anywhere currently, add some command for it, or hard code the logic such that if soft-deleated entries exceed a certain amount, a compact function will be called automatically, i think the best place for this to happed will be in delete command block in server.handel_client, as its the natural place, and we can also print out a message that it exceeded to engine make a complete new database. 
 2. Tests expect "OK\n" which is not shifted to, more descriptive state of the engine, so update the tests accordingly.
 
-### 5/9/10:
+### 5/9/10: 10 ? not 26
 1. Somehow i hate working on vector_store files the most, each other file and part of this project, i love spending my time on, but for some reason vector_store does not get any love, i just dont like that file :), its not even a long file its just like 300lines of code, but its just soo mixed together and just a mess.
 2. 
 
+### 6/9/26:
+NOTE:1  |   Types.hpp cleaned, now only has 2 structs(Query_result, Parse_result), and one conversion function which copies data from a 'Entry' struct to a 'Vector' struct
+
+NOTE:2  |   'Vector' struct in schema.hpp has no doxy. 
+
+NOTE:3  |   All files use #ifndef and #endif, blocks but schema.hpp uses #prama once, switch all to 1. 
+
+NOTE:4  |   in similarities.hpp two cosine_similarity() functions exist, they are not used anywhere in the system, only present because of their initial use from before release of v1. Can safely delete both functions, or just let them be. They are not written efficiently either, both use sqrt frequently, and disobey the "dont repeat yourself" rule.
+
+NOTE:5  |   In file_manager.h, read_text() needs doxy.
+
+NOTE:6  |   File_manager.find_by_id() is a O(n) function as the database is not sorted, make this a goal for v3, to somehow get this logrithmic, ofcourse after some sort of linearithmic sorting.
+
+NOTE:7  |   File_manager.compact(), also needs stored safety conditions, maybe v2 or v3.
+NOTE:8  |   Vector_server needs new doxy
+NOTE:9  |   I will just make the ivf centroids persistent and stop the automatic deletion of databases then i am done with the engine side of this project.
+
+
+### 8/9/26:
 
 
 

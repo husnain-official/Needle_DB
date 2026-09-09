@@ -97,7 +97,10 @@ void Vector_Server::run()
     {
         ivf_index_.build_(vector_store);
         size_t centroids_to_save = std::min(size_t(schema::MAX_CENTROIDS), ivf_index_.get_built_centroids_number_());
+        size_t centroids_built_at = vector_store.get_count();
+        this->last_build_at = centroids_built_at;
         const float *centroids_ptr = ivf_index_.get_centroids_data_ptr_();
+        file_manager.write_index_last_build(centroids_built_at);
         file_manager.write_index_(centroids_ptr, centroids_to_save);
     }
     else
@@ -111,10 +114,14 @@ void Vector_Server::run()
             std::cerr << "[Server]  |   WARNING: Index file present but unusable -- rebuilding from scratch.\n";
             ivf_index_.build_(vector_store);
             size_t centroids_to_save = ivf_index_.get_built_centroids_number_();
+            size_t centroids_built_at = vector_store.get_count();
+            this->last_build_at = centroids_built_at;
+            file_manager.write_index_last_build(centroids_built_at);
             file_manager.write_index_(ivf_index_.get_centroids_data_ptr_(), centroids_to_save);
         }
         else // valid data inside index_ file.
         {
+            this->last_build_at = file_manager.read_index_last_build();
             ivf_index_.set_centroids(file_manager.read_index_(centroids_to_copy));
             // centroids have been set now, the indexes have to be assigned(lists have to be created)
             ivf_index_.build_lists();
@@ -191,6 +198,7 @@ void Vector_Server::handle_client(int client_fd)
             if ((command.rfind("INSERT", 0)) == 0) // INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
             {
                 bool insert_failed = false;
+                bool warning = false;
                 std::string error_message;
 
                 Vector vector_entry;
@@ -234,13 +242,21 @@ void Vector_Server::handle_client(int client_fd)
                             vector_store.make_entry(vector_entry); // update both RAM and  index_(internally).
                         }
                     }
+                    size_t entires_made_after_last_build = vector_store.get_count() - this->last_build_at;
+
+                    if ((vector_store.get_count() >= (this->last_build_at * schema::OPTIMIZE_FACTOR)) and (vector_store.get_count() >= schema::OPTIMIZE_REM_STARTS_AT))
+                    {
+                        results.message = "INSERT <Successful>, WARNING<OPTIMIZE needed for better searches.>\n";
+                        warning = true;
+                    }
                 } // --- lock-ends-here ---, NOTE: .send() is not shared, therefore 1 single client conncection will not slow the entire server.
                 if (insert_failed)
                 {
                     send(client_fd, error_message.data(), error_message.length(), 0);
                     continue;
                 }
-                results.message = "INSERT <Successful>\n";
+                if (!warning)
+                    results.message = "INSERT <Successful>\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
                 continue;
             }
@@ -345,6 +361,7 @@ void Vector_Server::handle_client(int client_fd)
             {
                 std::string error_message;
                 bool delete_failed = false;
+                bool compact_called = false;
 
                 std::string id = "";
                 Parse_result results;
@@ -376,14 +393,50 @@ void Vector_Server::handle_client(int client_fd)
                         error_message = "ERROR <Could not delete vector(Memory)\n>";
                         delete_failed = true;
                     }
+                    else if (file_manager.compact_allowed())
+                    {
+                        compact_called = true;
+                        if ((!file_manager.compact()))
+                        {
+                            error_message = "DELETE <Successful>, WARNING <Database compaction failed>.\n";
+                            delete_failed = true;
+                        }
+                    }
                 }
+
                 if (delete_failed)
                 {
                     send(client_fd, error_message.data(), error_message.length(), 0);
                     continue;
                 }
                 results.message = "DELETE <Successful>\n";
+                if (compact_called)
+                    results.message = "DELETE <Successful>, Compaction<Successful>\n";
                 send(client_fd, results.message.data(), results.message.length(), 0);
+            }
+            else if ((command.rfind("OPTIMIZE", 0)) == 0)
+            {
+                Parse_result results;
+                results = parser.optimize_parsing(command);
+                if (!results.success)
+                {
+                    send(client_fd, results.message.data(), results.message.length(), 0);
+                    continue;
+                }
+                // ---- everything below reads or writes vector_store / file_manager, needs a lock ----
+                {
+                    std::lock_guard<std::mutex> lock(store_mutex_);
+                    ivf_index_.build_(vector_store);
+                    size_t centroids_to_save = ivf_index_.get_built_centroids_number_();
+                    size_t centroids_built_at = vector_store.get_count();
+                    this->last_build_at = centroids_built_at;
+                    file_manager.write_index_last_build(centroids_built_at);
+                    file_manager.write_index_(ivf_index_.get_centroids_data_ptr_(), centroids_to_save);
+                }
+                // ---- simple enough
+                results.message = "OPTIMIZE <Successful>\n";
+                send(client_fd, results.message.data(), results.message.length(), 0);
+                continue;
             }
             else if ((command.rfind("SAVE", 0)) == 0) // SAVE
             {
@@ -441,6 +494,14 @@ void Vector_Server::handle_client(int client_fd)
                             vector_store.make_entry(vec_entry);
                         }
                         ivf_index_.build_(vector_store);
+                        size_t centroids_to_save = std::min(size_t(schema::MAX_CENTROIDS), ivf_index_.get_built_centroids_number_());
+                        size_t centroids_built_at = vector_store.get_count();
+                        this->last_build_at = centroids_built_at;
+                        const float *centroids_ptr = ivf_index_.get_centroids_data_ptr_();
+                        file_manager.write_index_last_build(centroids_built_at);
+                        file_manager.write_index_(centroids_ptr, centroids_to_save);
+
+                        //
                     }
                 }
                 if (load_failed)

@@ -1,69 +1,35 @@
-### Mult-threading of handle_clients()
-1. First i changed the code to run and pass all test files with 1 sub-thread for the only client connected, this was simple enough and was done using the thread library, and simple member functions like detach to detach the sub-thread from the parent thread, so the clients may remain independent which was the entire purpose. 
-2. NOTE: OK/n is now being switch to more usefull outputs like "DELETE <Successful>\n"
-3. Updated server test files to also test the concurrency, and multiple clients, Passed. 
-
-### Cleaning up- before deciding what to do next.
-1. Updated the Config struct to only have members: port, entry_db_path, text_db_path
-2. Moved the Config struct to schema.hpp as it also provides system-level constraints.
-3. Config struct's entry file now renamed to "./data/database_entry.vdb" from "./data/database.vdb"
-4. Cleaned up schema.hpp, needs new doxy for 'Vector'. 
-5. Cleaned up similarities.hpp, has dead code (2 cosine_similarity functions) in it. 
-6. Cleaned up env_config.hpp, NOTE: in the final documentation, EXPLICITLY, state the code in this file was AI generated.
-7. Cleaned up command_parser.h/cpp and updated the doxy in .h manually.
-8. File_manager.delete_entry() parameter index is now a const
-9. Cleaned up file_manager.h/cpp
-10. 
-
-### Persistence of ivf centroids
-1. 
-* **Fixed critical truncation bug:** Prevented accidental wiping of existing database files in the `File_manager` constructor when only a single file (like the index) was missing.
-* **Decoupled index file logic:** The index file is now treated as a recoverable, secondary asset that will silently recreate itself if missing, preserving primary data files.
-* **Added strict corruption safeguards:** Added an exclusive-OR check (`entry_exists != text_exists`) to throw a runtime error if the core database files are in a partial or corrupted state.
-2. 
-* **Added index state detection:** Implemented `is_index_populated()` in `File_manager` using `std::filesystem::is_empty` to detect 0-byte (uninitialized) index files.
-* **Integrated auto-rebuild on boot:** Updated server initialization logic to dynamically route between building a new IVF index from the vector store or loading pre-calculated centroids from disk based on the index file's size.
-3. 
-* **Centralized hardcoded schema variables:** Extracted `MAX_CENTROIDS` and `MAX_PROBES_SEARCH` into the `schema` namespace and updated the `IVF_index` constructor to use them as default parameters.
-* **Implemented index deserialization:** Added `populate_index_` in `File_manager` to read centroid data directly from the binary file into memory.
-* **Integrated fast-load server routing:** Updated the server boot sequence to calculate required centroid dimensions and load existing indices directly from disk into `IVF_index` using move semantics.
-4. 
-* **Added index persistence:** Implemented `write_index_` and `read_index_` in `File_manager` for saving and loading the calculated IVF centroids to/from the binary index file.
-* **Integrated list rebuilding:** Added `build_lists()` in `IVF_index` to re-assign existing vector embeddings to the loaded centroids on server boot-up.
-* **Added safe memory management:** Implemented strict `sizeof(float)` byte calculations for binary I/O operations and ensured the inverted `lists` array is safely resized prior to index rebuilding.
-5. 
-made it such, if the index files size is 0, the server will recreate the indexes, and save them.
+### To-Do's, final things for v2 engine, hopefully done in 2 days.
+1. A new "OPTIMIZE" command, which rebuilds the centroids [DONE]
+2. A conditional in "DELETE" which automatically calls compact() [DONE]
+3. A suggesstion system, which will remind the client to call optimize after a condition has been met. [DONE]
 
 
+### Changes - 8/9/26
+- TODO-01
+1. Added 'optimize_parsing' to command_parser.h/.cpp
+2. Added a new 'OPTIMIZE' block in handle_client() in vector_server.cpp
 
+- TODO-03
+1. Added 2 more functios in file_manager(), they read and write the number at which the last build() was called. 
+2. Updated 2 functions, which read and write the centroids embeddings. 
+3. This changed the schema of the file a bit, document it later properly. 
+4. Added a new member in server to store at which entry the last build_ was made, for reminding users.
+5. Document it clearly, it is recommended that you optimize if the entries become twice of where the last build was made at.
+                    results.message = "INSERT <Successful>, WARNING<OPTIMIZE needed for better searches.>\n";
+sent if conditions are met.
 
-
+- TODO-02
+1. added a new func in file-manager to see if compact calling condition is met or not. 
+2. Updated the send message of "DELETE" if compact was called. 
+delete might now return such messages as well
+                            error_message = "DELETE <Successful>, WARNING <Database compaction failed>.\n";
+                    results.message = "DELETE <Successful>, Compaction<Successful>\n";
+ etc not just DELETE<Successful>
 
 ### NOTES are just my thoughts not what i have implemented yet.
-NOTE:1  |   Types.hpp cleaned, now only has 2 structs(Query_result, Parse_result), and one conversion function which copies data from a 'Entry' struct to a 'Vector' struct
+NOTE:1  |   Current implementation of TODO-01 has many problems from a system view, it stops all clients while its running and if this were even thought of for any production code, well i dont really have an analogy, its just bad.
 
-NOTE:2  |   'Vector' struct in schema.hpp has no doxy. 
-
-NOTE:3  |   All files use #ifndef and #endif, blocks but schema.hpp uses #prama once, switch all to 1. 
-
-NOTE:4  |   in similarities.hpp two cosine_similarity() functions exist, they are not used anywhere in the system, only present because of their initial use from before release of v1. Can safely delete both functions, or just let them be. They are not written efficiently either, both use sqrt frequently, and disobey the "dont repeat yourself" rule.
-
-NOTE:5  |   In file_manager.h, read_text() needs doxy.
-
-NOTE:6  |   File_manager.find_by_id() is a O(n) function as the database is not sorted, make this a goal for v3, to somehow get this logrithmic, ofcourse after some sort of linearithmic sorting.
-
-NOTE:7  |   File_manager.compact(), also needs stored safety conditions, maybe v2 or v3.
-NOTE:8  |   Vector_server needs new doxy
-NOTE:9  |   I will just make the ivf centroids persistent and stop the automatic deletion of databases then i am done with the engine side of this project.
-
-
-
-
-
-
-
-
-
+NOTE:2  |   
 
 
 
@@ -119,3 +85,41 @@ NOTE:9  |   I will just make the ivf centroids persistent and stop the automatic
 ### Unexpected Behavior / To-Be-Changed
 * **File-Manager (Compact):** The `compact()` function might corrupt files if the system shuts down mid-execution.
 * **File-Manager (Data Wipe):** The constructor currently destroys working data and silently starts over if either database file is deleted. This needs to be documented and eventually changed to throw a runtime error instead.
+
+### Mult-threading of handle_clients()
+1. First i changed the code to run and pass all test files with 1 sub-thread for the only client connected, this was simple enough and was done using the thread library, and simple member functions like detach to detach the sub-thread from the parent thread, so the clients may remain independent which was the entire purpose. 
+2. NOTE: OK/n is now being switch to more usefull outputs like "DELETE <Successful>\n"
+3. Updated server test files to also test the concurrency, and multiple clients, Passed. 
+
+### Cleaning up- before deciding what to do next.
+1. Updated the Config struct to only have members: port, entry_db_path, text_db_path
+2. Moved the Config struct to schema.hpp as it also provides system-level constraints.
+3. Config struct's entry file now renamed to "./data/database_entry.vdb" from "./data/database.vdb"
+4. Cleaned up schema.hpp, needs new doxy for 'Vector'. 
+5. Cleaned up similarities.hpp, has dead code (2 cosine_similarity functions) in it. 
+6. Cleaned up env_config.hpp, NOTE: in the final documentation, EXPLICITLY, state the code in this file was AI generated.
+7. Cleaned up command_parser.h/cpp and updated the doxy in .h manually.
+8. File_manager.delete_entry() parameter index is now a const
+9. Cleaned up file_manager.h/cpp
+10. 
+
+### Persistence of ivf centroids
+1. 
+* **Fixed critical truncation bug:** Prevented accidental wiping of existing database files in the `File_manager` constructor when only a single file (like the index) was missing.
+* **Decoupled index file logic:** The index file is now treated as a recoverable, secondary asset that will silently recreate itself if missing, preserving primary data files.
+* **Added strict corruption safeguards:** Added an exclusive-OR check (`entry_exists != text_exists`) to throw a runtime error if the core database files are in a partial or corrupted state.
+2. 
+* **Added index state detection:** Implemented `is_index_populated()` in `File_manager` using `std::filesystem::is_empty` to detect 0-byte (uninitialized) index files.
+* **Integrated auto-rebuild on boot:** Updated server initialization logic to dynamically route between building a new IVF index from the vector store or loading pre-calculated centroids from disk based on the index file's size.
+3. 
+* **Centralized hardcoded schema variables:** Extracted `MAX_CENTROIDS` and `MAX_PROBES_SEARCH` into the `schema` namespace and updated the `IVF_index` constructor to use them as default parameters.
+* **Implemented index deserialization:** Added `populate_index_` in `File_manager` to read centroid data directly from the binary file into memory.
+* **Integrated fast-load server routing:** Updated the server boot sequence to calculate required centroid dimensions and load existing indices directly from disk into `IVF_index` using move semantics.
+4. 
+* **Added index persistence:** Implemented `write_index_` and `read_index_` in `File_manager` for saving and loading the calculated IVF centroids to/from the binary index file.
+* **Integrated list rebuilding:** Added `build_lists()` in `IVF_index` to re-assign existing vector embeddings to the loaded centroids on server boot-up.
+* **Added safe memory management:** Implemented strict `sizeof(float)` byte calculations for binary I/O operations and ensured the inverted `lists` array is safely resized prior to index rebuilding.
+5. 
+made it such, if the index files size is 0, the server will recreate the indexes, and save them.
+6. 
+Updated vector_server tests, file_manager tests

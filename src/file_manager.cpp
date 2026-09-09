@@ -333,12 +333,33 @@ long File_manager::find_by_id(const std::string &id)
     }
     return -1;
 }
+bool File_manager::compact_allowed()
+{
+    if (header_.total_vector_count == 0)
+        return false;
+
+    uint64_t dead_entries = header_.total_vector_count - header_.live_vector_count;
+
+    return (dead_entries * schema::DELETE_FACTOR) >= header_.total_vector_count;
+}
+// ---- Index-File ----
+uint64_t File_manager::read_index_last_build()
+{
+    index_file_.clear();
+    index_file_.seekg(0, std::ios::beg);
+    uint64_t last_build_at = 0;
+    index_file_.read(reinterpret_cast<char *>(&last_build_at), sizeof(uint64_t));
+    if (!index_file_.good())
+        return 0;
+    else
+        return last_build_at;
+}
 std::vector<float> File_manager::read_index_(const size_t centroid_numbers)
 {
     size_t total_floats = centroid_numbers * schema::DIMENSIONS;
     size_t total_bytes = total_floats * sizeof(float);
     index_file_.clear();
-    index_file_.seekg(0, std::ios::beg);
+    index_file_.seekg(sizeof(uint64_t), std::ios::beg);
     std::vector<float> centroids(total_floats, 0.0f);
     index_file_.read(reinterpret_cast<char *>(centroids.data()), total_bytes);
     if (!index_file_.good())
@@ -346,12 +367,20 @@ std::vector<float> File_manager::read_index_(const size_t centroid_numbers)
     else
         return centroids;
 }
+bool File_manager::write_index_last_build(uint64_t entry_number)
+{
+    index_file_.clear();
+    index_file_.seekp(0, std::ios::beg);
+    index_file_.write(reinterpret_cast<const char *>(&entry_number), sizeof(uint64_t));
+    index_file_.flush();
+    return index_file_.good();
+}
 bool File_manager::write_index_(const float *centroids_ptr, const size_t centroid_numbers)
 {
     size_t total_floats = centroid_numbers * schema::DIMENSIONS;
     size_t total_bytes = total_floats * sizeof(float);
     index_file_.clear();
-    index_file_.seekp(0, std::ios::beg);
+    index_file_.seekp(sizeof(uint64_t), std::ios::beg);
     index_file_.write(reinterpret_cast<const char *>(centroids_ptr), total_bytes);
     index_file_.flush();
     return index_file_.good();
@@ -361,7 +390,10 @@ size_t File_manager::get_index_size()
     try
     {
         std::uintmax_t size = std::filesystem::file_size(index_file_path_);
-        return size;
+        if (size > sizeof(uint64_t))
+            return size - sizeof(uint64_t);
+        else
+            return 0;
     }
     catch (const std::filesystem::filesystem_error &e)
     {

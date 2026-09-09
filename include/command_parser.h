@@ -47,6 +47,8 @@ public:
      */
     Parse_result save_parsing(std::string &, bool);
 
+    Parse_result optimize_parsing(std::string &);
+
 private:
     // --- Helpers
     /**
