@@ -1,6 +1,7 @@
 #   Folders to ignore
 .vscode/
 build/
+build-debug/
 include/nlohmann/
 bin/
 obj/
@@ -36,3 +37,4 @@ __pycache__/
 hello.py 
 test_embed.py
 swark-output/
+context.md

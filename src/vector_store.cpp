@@ -3,55 +3,63 @@
 //--- math and similarity functions ---
 bool Vector_store::normalise_vector(std::vector<float> &vec)
 {
-    double long vec_mag = 0;
-    for (size_t i = 0; i < vec.size(); i++)
-        vec_mag += (vec[i] * vec[i]);
+    long double vec_mag = 0.0;
+    for (const float val : vec)
+        vec_mag += (val * val);
     vec_mag = sqrt(vec_mag);
-    if (vec_mag == 0)
+
+    // Protect against zero or near-zero magnitudes (prevents NaN or Infinity)
+    if (vec_mag < 1e-9)
         return false;
-    // divide each element with magnitude.
-    for (size_t i = 0; i < vec.size(); i++)
-        vec[i] = vec[i] / vec_mag;
-    // we have removed the 'magnitude' of overlap and only 'direction' exists now. Cosine and Dot product same results now.
+
+    float inv_mag = 1.0f / static_cast<float>(vec_mag);
+    for (float &val : vec)
+        val *= inv_mag;
+
     return true;
 }
+bool Vector_store::normalise_vector(float *vec)
+{
+    long double vec_mag = 0.0;
+    for (size_t i = 0; i < schema::DIMENSIONS; i++) // Exception: DB_entry uses float array so rely on schema::
+        vec_mag += (vec[i] * vec[i]);
+    vec_mag = sqrt(vec_mag);
+
+    if (vec_mag < 1e-9)
+        return false;
+
+    float inv_mag = 1.0f / static_cast<float>(vec_mag);
+    for (size_t i = 0; i < schema::DIMENSIONS; i++)
+        vec[i] *= inv_mag;
+
+    return true;
+}
+
 //--- Vector_store implementation
 // 1. getters
-const float *Vector_store::get_embedding(size_t i) const
-{
-    return (embeddings_.data() + (i * dims_));
-}
-const std::string &Vector_store::get_id(size_t i) const
-{
-    return ids_[i];
-}
-const std::size_t Vector_store::get_dims() const { return dims_; }
+const float *Vector_store::get_embedding(const size_t i) const { return (embeddings_.data() + (i * dims_)); }
+const std::string &Vector_store::get_id(const size_t i) const { return ids_[i]; }
 const std::size_t Vector_store::get_count() const { return count_; }
-Parse_result Vector_store::get_index_in_ram(const std::string &id)
+const std::size_t Vector_store::get_text_length(const size_t i) const { return text_lengths_[i]; }
+const std::size_t Vector_store::get_text_offset(const size_t i) const { return text_offsets_[i]; }
+
+const int64_t Vector_store::get_index_in_ram(const std::string &id) const
 {
     for (size_t i = 0; i < count_; i++)
     {
         if (ids_[i] == id)
-            return {true, std::to_string(i)};
+            return i;
     }
-    return {false, "ERROR<Id not found in Memory>\n"};
+    return -1;
 }
-Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr, std::vector<size_t> &matching_indices)
+Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr, const size_t &mdata_pairs_entered, std::vector<size_t> &matching_indices)
 {
     try
     {
         matching_indices.clear();
 
-        // Count how many query pairs are actually set (non-empty key)
-        size_t query_pair_count = 0;
-        for (size_t m = 0; m < conditions.meta_data_pairs; m++)
-        {
-            if (mdata_arr[m].key[0] != '\0')
-                query_pair_count++;
-        }
-
         // No metadata in query — every index is a candidate
-        if (query_pair_count == 0)
+        if (mdata_pairs_entered == 0)
         {
             matching_indices.resize(count_);
             std::iota(matching_indices.begin(), matching_indices.end(), 0);
@@ -71,7 +79,7 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
 
             // Every non-empty query pair must exist with a matching value
             bool all_match = true;
-            for (size_t m = 0; m < conditions.meta_data_pairs; m++)
+            for (size_t m = 0; m < schema::META_DATA_KP_PAIRS; m++)
             {
                 if (mdata_arr[m].key[0] == '\0')
                     continue; // unused slot, skip
@@ -90,7 +98,6 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
             if (all_match)
                 matching_indices.push_back(i);
         }
-
         return {true, ""};
     }
     catch (const std::exception &e)
@@ -98,16 +105,16 @@ Parse_result Vector_store::get_matching_indices(const Metadata_entry *mdata_arr,
         return {false, std::string("ERROR <get_matching_indices failed: ") + e.what() + ">\n"};
     }
 }
-Vector_index *Vector_store::get_index() const { return index_; }
+Vector_index *Vector_store::get_index() const { return index_; } // Never Used
 // 2. setters
 Parse_result Vector_store::set_dims_(const std::size_t dim)
 {
-    if (dim != conditions.dims)
+    if (dim != schema::DIMENSIONS)
         return {false, "ERROR <Mismatch of dimensions in file and in program set value>\n"};
     dims_ = dim;
     return {true, ""};
 }
-Parse_result Vector_store::set_count_(const int count)
+Parse_result Vector_store::set_count_(const int count) // Never Used
 {
     if (count < 0)
         return {false, "ERROR <File corrupted, count read is negative>\n"};
@@ -120,14 +127,14 @@ void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::stri
         return;
     //  setup the inner map
     std::map<std::string, std::string> inner_key_val;
-    for (int i = 0; i < conditions.meta_data_pairs; i++)
+    for (int i = 0; i < schema::META_DATA_KP_PAIRS; i++)
     {
         // skip empty key/values
         if (mdata_arr[i].key[0] == '\0')
             continue;
         // overflow prevention
-        size_t key_len = strnlen(mdata_arr[i].key, conditions.meta_data_length);
-        size_t val_len = strnlen(mdata_arr[i].value, conditions.meta_data_length);
+        size_t key_len = strnlen(mdata_arr[i].key, schema::META_DATA_LENGTH);
+        size_t val_len = strnlen(mdata_arr[i].value, schema::META_DATA_LENGTH);
         //  safe-strings
         std::string safe_key(mdata_arr[i].key, key_len);
         std::string safe_val(mdata_arr[i].value, val_len);
@@ -138,31 +145,36 @@ void Vector_store::set_metadata(const Metadata_entry *mdata_arr, const std::stri
     metadata_[id] = std::move(inner_key_val);
     return;
 }
+// 3. core-operations
 void Vector_store::clear()
 {
     ids_.clear();
     embeddings_.clear();
+    text_lengths_.clear();
+    text_offsets_.clear();
     metadata_.clear();
     count_ = 0;
     ids_.reserve(count_);
     embeddings_.reserve(count_ * dims_);
 }
-void Vector_store::make_entry(const std::string id_buf, std::vector<float> embd_buf, const Metadata_entry *mdata_arr)
+void Vector_store::make_entry(const Vector &vec)
 {
-    ids_.push_back(id_buf);
-    embeddings_.insert(embeddings_.end(), embd_buf.begin(), embd_buf.end());
-    set_metadata(mdata_arr, id_buf);
+    ids_.push_back(vec.id);
+    embeddings_.insert(embeddings_.end(), vec.embeddings.begin(), vec.embeddings.end());
+    set_metadata(vec.meta_data, vec.id);
+    text_lengths_.push_back(vec.text_length);
+    text_offsets_.push_back(vec.text_offset);
     count_++;
     if (index_)
         index_->add_(count_ - 1);
 }
 bool Vector_store::remove_entry(const std::string &id)
 {
-    Parse_result p = get_index_in_ram(id);
-    if (!p.success)
+    int64_t index = get_index_in_ram(id);
+    if (index == -1)
         return false;
 
-    size_t target = std::stoi(p.message);
+    size_t target = index;
     size_t last = count_ - 1;
     // 1. Remove both entries from IVF
     if (index_)
@@ -174,6 +186,8 @@ bool Vector_store::remove_entry(const std::string &id)
 
     // 2.1. Swap data
     std::swap(ids_[target], ids_[last]);
+    std::swap(text_lengths_[target], text_lengths_[last]);
+    std::swap(text_offsets_[target], text_offsets_[last]);
 
     // 2.2. Swap embedding blocks in the flat array
     float *target_block = embeddings_.data() + (target * dims_);
@@ -182,6 +196,8 @@ bool Vector_store::remove_entry(const std::string &id)
 
     // 3. Pop the last entry
     ids_.pop_back();
+    text_lengths_.pop_back();
+    text_offsets_.pop_back();
     embeddings_.resize(embeddings_.size() - dims_);
 
     // 4. Delete metadata
@@ -236,7 +252,7 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
     {
         for (size_t i : *selected_indexes)
         {
-            similarity = dot_similarity(query_v.data, get_embedding(i));
+            similarity = dot_similarity(query_v.embeddings, get_embedding(i));
             results.push_back({similarity, i});
         }
     }
@@ -244,7 +260,7 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
     {
         for (size_t i = 0; i < stored_vectors; i++)
         {
-            similarity = dot_similarity(query_v.data, get_embedding(i));
+            similarity = dot_similarity(query_v.embeddings, get_embedding(i));
             results.push_back({similarity, i});
         }
     }
@@ -265,15 +281,17 @@ void Vector_store::return_k_most_similar(const Vector &query_v, size_t &top_k, s
         similarities.push_back(results[i].similarity);
     }
 }
-bool Vector_store::id_exists(std::string &id_to_check)
+bool Vector_store::id_exists(const std::string &id_to_check) const
 {
-    std::size_t id_in_ram = this->ids_.size();
-    if (id_in_ram == 0)
-        return false;
-    for (size_t i = 0; i < id_in_ram; i++)
+    for (const auto &existing_id : this->ids_)
     {
-        if (id_to_check == ids_[i])
+        if (id_to_check == existing_id)
             return true;
     }
     return false;
+}
+bool Vector_store::id_exists(const char *id_to_check) const
+{
+    size_t id_size = strnlen(id_to_check, schema::ID_LENGTH); // Exception: DB_entry uses c-string so rely on schema::
+    return id_exists(std::string(id_to_check, id_size));
 }

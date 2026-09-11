@@ -27,6 +27,7 @@ inline float cosine_similarity(const std::vector<float> &vec_a, const std::vecto
     float similarity = dot_product / (mag_a * mag_b);
     return (similarity > 1 or similarity < -1) ? 0 : similarity;
 }
+
 /**
  * @brief Computes the normalized angular distance against a raw contiguous memory block.
  * @param vec_a Reference floating-point embedding sequence
@@ -53,6 +54,7 @@ inline float cosine_similarity(const std::vector<float> &vec_a, const float *vec
     float similarity = dot_product / (mag_a * mag_b);
     return (similarity > 1 or similarity < -1) ? 0 : similarity;
 }
+
 /**
  * @brief Executes an unnormalized scalar projection using highly optimized inner products.
  * @param vec_a First floating-point embedding sequence
@@ -64,6 +66,7 @@ inline float dot_similarity(const std::vector<float> &vec_a, const std::vector<f
 {
     return std::inner_product(vec_a.begin(), vec_a.end(), vec_b.begin(), 0.0f);
 }
+
 /**
  * @brief Executes an unnormalized scalar projection against a raw contiguous memory block.
  * @param vec_a Reference floating-point embedding sequence

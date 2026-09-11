@@ -1,11 +1,10 @@
 #include "ivf.h"
 
-// Fixed Euclidean distance: Computes squared L2 distance (avoids costly sqrt)
 // Overloaded to accept raw pointers for high-performance tight loops
-float IVF_index::euclidean_distance(const float *v1, const float *v2, size_t dims) const
+float IVF_index::euclidean_distance(const float *v1, const float *v2) const
 {
     float distance = 0;
-    for (size_t i = 0; i < dims; i++)
+    for (size_t i = 0; i < schema::DIMENSIONS; i++)
     {
         float diff = v1[i] - v2[i];
         distance += (diff * diff); // Squaring the difference correctly
@@ -14,14 +13,14 @@ float IVF_index::euclidean_distance(const float *v1, const float *v2, size_t dim
 }
 float IVF_index::euclidean_distance(const std::vector<float> &v1, const std::vector<float> &v2) const
 {
-    return euclidean_distance(v1.data(), v2.data(), v1.size());
+    return euclidean_distance(v1.data(), v2.data());
 }
 
 void IVF_index::build_(Vector_store &store)
 {
     store_ref = &store;
     size_t num_vectors = store.get_count();
-    size_t dims = store.get_dims();
+    size_t dims = schema::DIMENSIONS;
 
     // Always initialize lists, even if empty
     lists.clear();
@@ -32,45 +31,55 @@ void IVF_index::build_(Vector_store &store)
     if (num_vectors == 0)
         return;
 
-    // Cap centroid count to the total number of vectors if dataset is very small
-    centroid_count = std::min(centroid_count, num_vectors);
+    // --- Step 0: Build a bounded sample — k-means only needs a representative
+    // subset to find good centroid positions; running all 10 iterations over
+    // the full dataset is wasted work once num_vectors >> sample size ---
+    size_t sample_size = std::min(num_vectors, static_cast<size_t>(schema::MAX_KMEANS_SAMPLE));
 
-    // --- Step 1: Initialize centroids randomly from existing data ---
+    // Cap centroid count to the sample size (not the full num_vectors) —
+    // we can't seed more centroids than we have sampled points to seed them from
+    centroid_count = std::min(centroid_count, sample_size);
+
     std::vector<size_t> indices(num_vectors);
     std::iota(indices.begin(), indices.end(), 0); // Fill with 0, 1, 2...
 
     std::mt19937 rng(42); // Fixed seed for reproducibility in debugging
     std::shuffle(indices.begin(), indices.end(), rng);
 
+    // The sample used for both centroid seeding and every k-means iteration below
+    std::vector<size_t> sample(indices.begin(), indices.begin() + sample_size);
+
+    // --- Step 1: Initialize centroids randomly from the sample ---
     for (size_t i = 0; i < centroid_count; i++)
     {
-        const float *vec = store.get_embedding(indices[i]);
+        const float *vec = store.get_embedding(sample[i]);
         std::copy(vec, vec + dims, centroids.begin() + (i * dims));
     }
 
-    // --- Step 2: K-Means Clustering (fixed 10 iterations) ---
+    // --- Step 2: K-Means Clustering over the sample only (fixed 10 iterations) ---
+    std::vector<std::vector<size_t>> sample_lists(centroid_count);
     for (int iter = 0; iter < 10; iter++)
     {
         // Clear lists for this iteration
-        for (auto &list : lists)
+        for (auto &list : sample_lists)
             list.clear();
 
-        // Assign all vectors to their nearest centroid
-        for (size_t i = 0; i < num_vectors; i++)
+        // Assign sampled vectors to their nearest centroid
+        for (size_t idx : sample)
         {
-            const float *vec = store.get_embedding(i);
+            const float *vec = store.get_embedding(idx);
             size_t best_c = find_nearest_centroid(vec, dims);
-            lists[best_c].push_back(i);
+            sample_lists[best_c].push_back(idx);
         }
 
-        // Recalculate centroid positions based on assigned vectors
+        // Recalculate centroid positions based on assigned sample vectors
         for (size_t c = 0; c < centroid_count; c++)
         {
-            if (lists[c].empty())
+            if (sample_lists[c].empty())
                 continue; // Skip empty clusters
 
             std::vector<float> new_centroid(dims, 0.0f);
-            for (size_t idx : lists[c])
+            for (size_t idx : sample_lists[c])
             {
                 const float *vec = store.get_embedding(idx);
                 for (size_t d = 0; d < dims; d++)
@@ -82,18 +91,24 @@ void IVF_index::build_(Vector_store &store)
             // Average the positions
             for (size_t d = 0; d < dims; d++)
             {
-                centroids[c * dims + d] = new_centroid[d] / lists[c].size();
+                centroids[c * dims + d] = new_centroid[d] / sample_lists[c].size();
             }
         }
     }
+
+    // --- Step 3: Assign the FULL dataset to the now-converged centroids ---
+    // The one unavoidable O(num_vectors) pass — every real vector needs a
+    // home in `lists`, or it becomes unsearchable. store_ref/centroid_count
+    // are already set above, so build_lists() can be reused as-is.
+    build_lists();
 }
 
 std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 {
-    if (!store_ref || lists.empty())
+    if (!store_ref or lists.empty())
         return {};
 
-    size_t dims = store_ref->get_dims();
+    size_t dims = schema::DIMENSIONS;
 
     // 1. Find the top 'nprobe' closest centroids to the query
     std::vector<std::pair<float, size_t>> centroid_dists;
@@ -101,7 +116,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 
     for (size_t i = 0; i < centroid_count; i++)
     {
-        float dist = euclidean_distance(query.data.data(), centroids.data() + (i * dims), dims);
+        float dist = euclidean_distance(query.embeddings.data(), centroids.data() + (i * dims));
         centroid_dists.push_back({dist, i});
     }
 
@@ -118,7 +133,7 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
         {
             const float *vec = store_ref->get_embedding(v_idx);
             // We use dot_similarity here to match standard VectorStore logic (assuming normalized vectors)
-            float sim = dot_similarity(query.data, vec);
+            float sim = dot_similarity(query.embeddings, vec);
             candidates.push_back({sim, v_idx});
         }
     }
@@ -141,10 +156,10 @@ std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)
 
 void IVF_index::add_(std::size_t index)
 {
-    if (!store_ref || centroids.empty() || lists.empty())
+    if (!store_ref or centroids.empty() or lists.empty())
         return;
 
-    size_t dims = store_ref->get_dims();
+    size_t dims = schema::DIMENSIONS;
     const float *vec = store_ref->get_embedding(index);
     size_t nearest = find_nearest_centroid(vec, dims);
     lists[nearest].push_back(index);
@@ -166,7 +181,7 @@ void IVF_index::delete_(std::size_t index)
     }
 }
 
-// Helper to find the closest centroid to a given vector
+// Helpers
 size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
 {
     float best_dist = std::numeric_limits<float>::max();
@@ -174,7 +189,7 @@ size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
 
     for (size_t i = 0; i < centroid_count; i++)
     {
-        float dist = euclidean_distance(vec, centroids.data() + (i * dims), dims);
+        float dist = euclidean_distance(vec, centroids.data() + (i * dims));
         if (dist < best_dist)
         {
             best_dist = dist;
@@ -182,4 +197,37 @@ size_t IVF_index::find_nearest_centroid(const float *vec, size_t dims) const
         }
     }
     return best_idx;
+}
+void IVF_index::set_ref_store(const Vector_store &store)
+{
+    this->store_ref = &store;
+}
+void IVF_index::set_centroids(std::vector<float> &&loaded_centroids)
+{
+    this->centroids = std::move(loaded_centroids);
+    this->centroid_count = this->centroids.size() / schema::DIMENSIONS;
+}
+void IVF_index::build_lists()
+{
+    if (centroid_count == 0 or !store_ref)
+        return;
+
+    lists.clear();
+    lists.resize(this->centroid_count);
+    // Assign all vectors to their nearest centroid
+    size_t count = store_ref->get_count();
+    for (size_t i = 0; i < count; i++)
+    {
+        const float *vec = store_ref->get_embedding(i);
+        size_t best_c = find_nearest_centroid(vec, schema::DIMENSIONS);
+        lists[best_c].push_back(i);
+    }
+}
+const size_t IVF_index::get_built_centroids_number_() const
+{
+    return this->centroid_count;
+}
+const float *IVF_index::get_centroids_data_ptr_() const
+{
+    return this->centroids.data();
 }
