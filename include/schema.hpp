@@ -7,6 +7,9 @@
         o   Vector is for vector_store's internals and other parts of the system.
 */
 //  ----------------------------------------- Engine-Schema ------------------------------------------
+/**
+ * @brief Engine-wide operational constants and binary schema constraints.
+ */
 namespace schema
 {
     constexpr uint16_t DIMENSIONS = 1024;
@@ -23,6 +26,7 @@ namespace schema
     constexpr uint16_t OPTIMIZE_REM_STARTS_AT = 500;
     constexpr uint8_t OPTIMIZE_FACTOR = 2;
     constexpr uint8_t DELETE_FACTOR = 8;
+    constexpr uint32_t MAX_KMEANS_SAMPLE = 50000;
 }
 
 /**

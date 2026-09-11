@@ -31,45 +31,55 @@ void IVF_index::build_(Vector_store &store)
     if (num_vectors == 0)
         return;
 
-    // Cap centroid count to the total number of vectors if dataset is very small
-    centroid_count = std::min(centroid_count, num_vectors);
+    // --- Step 0: Build a bounded sample — k-means only needs a representative
+    // subset to find good centroid positions; running all 10 iterations over
+    // the full dataset is wasted work once num_vectors >> sample size ---
+    size_t sample_size = std::min(num_vectors, static_cast<size_t>(schema::MAX_KMEANS_SAMPLE));
 
-    // --- Step 1: Initialize centroids randomly from existing data ---
+    // Cap centroid count to the sample size (not the full num_vectors) —
+    // we can't seed more centroids than we have sampled points to seed them from
+    centroid_count = std::min(centroid_count, sample_size);
+
     std::vector<size_t> indices(num_vectors);
     std::iota(indices.begin(), indices.end(), 0); // Fill with 0, 1, 2...
 
     std::mt19937 rng(42); // Fixed seed for reproducibility in debugging
     std::shuffle(indices.begin(), indices.end(), rng);
 
+    // The sample used for both centroid seeding and every k-means iteration below
+    std::vector<size_t> sample(indices.begin(), indices.begin() + sample_size);
+
+    // --- Step 1: Initialize centroids randomly from the sample ---
     for (size_t i = 0; i < centroid_count; i++)
     {
-        const float *vec = store.get_embedding(indices[i]);
+        const float *vec = store.get_embedding(sample[i]);
         std::copy(vec, vec + dims, centroids.begin() + (i * dims));
     }
 
-    // --- Step 2: K-Means Clustering (fixed 10 iterations) ---
+    // --- Step 2: K-Means Clustering over the sample only (fixed 10 iterations) ---
+    std::vector<std::vector<size_t>> sample_lists(centroid_count);
     for (int iter = 0; iter < 10; iter++)
     {
         // Clear lists for this iteration
-        for (auto &list : lists)
+        for (auto &list : sample_lists)
             list.clear();
 
-        // Assign all vectors to their nearest centroid
-        for (size_t i = 0; i < num_vectors; i++)
+        // Assign sampled vectors to their nearest centroid
+        for (size_t idx : sample)
         {
-            const float *vec = store.get_embedding(i);
+            const float *vec = store.get_embedding(idx);
             size_t best_c = find_nearest_centroid(vec, dims);
-            lists[best_c].push_back(i);
+            sample_lists[best_c].push_back(idx);
         }
 
-        // Recalculate centroid positions based on assigned vectors
+        // Recalculate centroid positions based on assigned sample vectors
         for (size_t c = 0; c < centroid_count; c++)
         {
-            if (lists[c].empty())
+            if (sample_lists[c].empty())
                 continue; // Skip empty clusters
 
             std::vector<float> new_centroid(dims, 0.0f);
-            for (size_t idx : lists[c])
+            for (size_t idx : sample_lists[c])
             {
                 const float *vec = store.get_embedding(idx);
                 for (size_t d = 0; d < dims; d++)
@@ -81,10 +91,16 @@ void IVF_index::build_(Vector_store &store)
             // Average the positions
             for (size_t d = 0; d < dims; d++)
             {
-                centroids[c * dims + d] = new_centroid[d] / lists[c].size();
+                centroids[c * dims + d] = new_centroid[d] / sample_lists[c].size();
             }
         }
     }
+
+    // --- Step 3: Assign the FULL dataset to the now-converged centroids ---
+    // The one unavoidable O(num_vectors) pass — every real vector needs a
+    // home in `lists`, or it becomes unsearchable. store_ref/centroid_count
+    // are already set above, so build_lists() can be reused as-is.
+    build_lists();
 }
 
 std::vector<size_t> IVF_index::search_(const Vector &query, size_t top_k)

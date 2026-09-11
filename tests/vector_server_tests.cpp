@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <vector>
 #include <random>
+#include <iomanip> // Added for table formatting
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -35,6 +36,12 @@ constexpr size_t kChurnIterations = 50;
 constexpr size_t kIndexPersistTestVectorCount = 15;
 constexpr size_t kPerformanceTestVectorCount = 50000;
 constexpr size_t kPerformanceRepetitions = 5;
+
+// Adjustable starting points for OPTIMIZE curiosity table (Group 23)
+constexpr size_t kOptimizeTableBaseCount = 2000;
+constexpr size_t kOptimizeTableStages = 5;
+constexpr auto kOptimizeTableGrowthFactor = schema::OPTIMIZE_FACTOR;
+constexpr size_t kOptimizeTableQueryRepetitions = 5;
 
 // -----------------------------------------------------------------------------
 // Base Fixture: Environment Management & Helpers
@@ -116,18 +123,30 @@ protected:
 
     std::string read_response(int fd, int timeout_ms = 200)
     {
-        struct timeval tv;
-        tv.tv_sec = timeout_ms / 1000;
-        tv.tv_usec = (timeout_ms % 1000) * 1000;
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+        auto set_timeout = [&](int ms)
+        {
+            struct timeval tv;
+            tv.tv_sec = ms / 1000;
+            tv.tv_usec = (ms % 1000) * 1000;
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+        };
+        set_timeout(timeout_ms);
 
         std::string response;
         char buffer[4096];
+        bool got_first_byte = false;
         while (true)
         {
             ssize_t n = recv(fd, buffer, sizeof(buffer), 0);
             if (n > 0)
+            {
                 response.append(buffer, n);
+                if (!got_first_byte)
+                {
+                    got_first_byte = true;
+                    set_timeout(200); // short quiet-gap check from here on
+                }
+            }
             else
                 break;
         }
@@ -412,7 +431,7 @@ TEST_F(VectorServerIntegrationTest, Delete_ValidId_ReturnsOkAndRemovesFromStore)
     EXPECT_TRUE(read_response(client_fd).find("INSERT <Successful>") != std::string::npos);
 
     send_command(client_fd, "DELETE id_to_delete\n");
-    EXPECT_EQ(read_response(client_fd), "DELETE <Successful>\n");
+    EXPECT_TRUE(read_response(client_fd).find("DELETE <Successful>") != std::string::npos);
 
     send_command(client_fd, BuildQueryCommand(1));
     std::string query_res = read_response(client_fd);
@@ -445,7 +464,7 @@ TEST_F(VectorServerIntegrationTest, Delete_MiddleElement_LeavesRemainingElements
     }
 
     send_command(client_fd, "DELETE mid_id_2\n");
-    EXPECT_EQ(read_response(client_fd), "DELETE <Successful>\n");
+    EXPECT_TRUE(read_response(client_fd).find("DELETE <Successful>") != std::string::npos);
 
     std::vector<size_t> remaining = {0, 1, 3, 4};
     for (size_t idx : remaining)
@@ -771,7 +790,7 @@ TEST_F(VectorServerIntegrationTest, ConcurrentMixed_OperationsMaintainConsistenc
             if (fd >= 0) {
                 send_command(fd, "DELETE pre_id_" + std::to_string(i) + "\n");
                 std::string r = read_response(fd);
-                if (r != "DELETE <Successful>\n") format_failures++;
+                if (r.find("DELETE <Successful>") == std::string::npos) format_failures++;
                 close(fd);
             } });
     }
@@ -895,6 +914,7 @@ TEST_F(VectorServerPersistenceTest, FirstBoot_BuildsFromScratchAndSavesToDisk)
     EXPECT_TRUE(verification_fm.is_index_populated());
 
     size_t expected_centroids = std::min(static_cast<size_t>(schema::MAX_CENTROIDS), kIndexPersistTestVectorCount);
+    // Since v4, File_manager prepends a sizeof(uint64_t) tracker inside the index file.
     size_t expected_bytes = expected_centroids * schema::DIMENSIONS * sizeof(float);
     EXPECT_EQ(verification_fm.get_index_size(), expected_bytes)
         << "Boot-time build-and-save path wrote incorrect number of centroid bytes";
@@ -921,23 +941,36 @@ TEST_F(VectorServerPersistenceTest, SecondBoot_LoadsPersistedIndexWithGrownData)
     int client_fd = connect_client(port_);
     ASSERT_GE(client_fd, 0);
 
-    // 2. Insert additional data so live vector count > centroid count
-    // (We add exactly enough to exceed MAX_CENTROIDS if we aren't already there)
+    // 2. Insert additional data...
     size_t new_inserts = schema::MAX_CENTROIDS + 5;
     for (size_t i = 0; i < new_inserts; i++)
     {
         send_command(client_fd, BuildInsertCommand("new_vec_" + std::to_string(i), "Grown data"));
         EXPECT_TRUE(read_response(client_fd).find("INSERT <Successful>") != std::string::npos);
     }
+
+    // Explicitly SAVE the first server's state so the header is fully synced to disk.
+    send_command(client_fd, "SAVE\n");
+    EXPECT_EQ(read_response(client_fd), "SAVE <Successful>\n");
     close(client_fd);
 
-    // 3. Boot a SECOND, independent server instance against the exact same files
-    //    (using a new port so they don't collide on networking)
+    // Copy files to isolate the second server from the first server's open file descriptors.
+    std::string entry2 = entry_path_ + "_2";
+    std::string text2 = text_path_ + "_2";
+    std::string index2 = index_path_ + "_2";
+    std::filesystem::copy(entry_path_, entry2, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy(text_path_, text2, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy(index_path_, index2, std::filesystem::copy_options::overwrite_existing);
+
+    // 3. Boot a SECOND, independent server instance against the copied files
     uint16_t second_port = port_counter++;
     Config second_config = config_;
     second_config.port = std::to_string(second_port);
+    second_config.vecdb_entry_file_path = entry2;
+    second_config.vecdb_text_file_path = text2;
+    second_config.vecdb_index_file_path = index2;
 
-    File_manager *second_fm = new File_manager(entry_path_, text_path_, index_path_);
+    File_manager *second_fm = new File_manager(entry2, text2, index2);
     Vector_store *second_vs = new Vector_store();
     Vector_Server *second_server = new Vector_Server(second_config.port, *second_vs, *second_fm, second_config);
 
@@ -962,7 +995,7 @@ TEST_F(VectorServerPersistenceTest, SecondBoot_LoadsPersistedIndexWithGrownData)
     EXPECT_TRUE(response.starts_with("QUERY <" + std::to_string(schema::MAX_K_SIMILAR) + ">\n"));
 
     // Verify the data was actually loaded and maintained alongside the new inserts
-    File_manager verification_fm(entry_path_, text_path_, index_path_);
+    File_manager verification_fm(entry2, text2, index2);
     EXPECT_EQ(verification_fm.get_live_vector_count(), kIndexPersistTestVectorCount + new_inserts);
     close(second_client);
 }
@@ -1126,4 +1159,297 @@ TEST_F(VectorServerPerformanceCuriosity, CompareSearchAlgorithms_Informational)
     std::cout << "[Curiosity] Loaded-Centroids setup time (skip k-means): " << total_load_setup_time << " ms\n";
     std::cout << "[Curiosity] Loaded-Centroids avg search time: "
               << (total_load_search_time / kPerformanceRepetitions) / 1000.0 << " ms\n\n";
+}
+
+// =============================================================================
+// Group 18: OPTIMIZE — end to end
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, Optimize_ValidCommand_ReturnsOk)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    send_command(client_fd, "OPTIMIZE\n");
+    std::string response = read_response(client_fd);
+    EXPECT_EQ(response, "OPTIMIZE <Successful>\n");
+
+    close(client_fd);
+}
+
+TEST_F(VectorServerIntegrationTest, Optimize_MalformedCommand_ReturnsError)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    // Any invalid/misspelled command drops into the unrecognized prefix trap.
+    send_command(client_fd, "OPTIMIZX\n");
+    std::string response = read_response(client_fd, 300);
+
+    // Treated as unrecognized prefix, silently ignored per Group 8 logic
+    EXPECT_TRUE(response.empty());
+
+    close(client_fd);
+}
+
+// =============================================================================
+// Group 19: Auto-Compaction
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, Delete_TriggeringAutoCompaction_ReturnsCompactionSuccess)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    // Insert enough records to pass schema::DELETE_FACTOR threshold after deletions
+    size_t num_inserts = schema::DELETE_FACTOR + 2;
+    for (size_t i = 0; i < num_inserts; i++)
+    {
+        send_command(client_fd, BuildInsertCommand("comp_id_" + std::to_string(i), "Txt"));
+        read_response(client_fd);
+    }
+
+    bool compaction_triggered = false;
+    for (size_t i = 0; i < num_inserts; i++)
+    {
+        send_command(client_fd, "DELETE comp_id_" + std::to_string(i) + "\n");
+        std::string response = read_response(client_fd);
+        if (response.find("Compaction<Successful>") != std::string::npos)
+        {
+            compaction_triggered = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(compaction_triggered) << "Auto-compaction did not trigger after meeting schema::DELETE_FACTOR threshold.";
+
+    close(client_fd);
+}
+
+// =============================================================================
+// Group 20: OPTIMIZE Reminder
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, Insert_TriggeringOptimizeReminder_ReturnsWarning)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    // Advance inserts directly towards schema::OPTIMIZE_REM_STARTS_AT
+    // Since this is a fresh database, last_build_at begins at 0,
+    // making schema::OPTIMIZE_REM_STARTS_AT the primary gating threshold.
+    for (size_t i = 0; i < schema::OPTIMIZE_REM_STARTS_AT - 1; i++)
+    {
+        send_command(client_fd, BuildInsertCommand("rem_id_" + std::to_string(i), "Txt"));
+        EXPECT_TRUE(read_response(client_fd).find("WARNING<OPTIMIZE") == std::string::npos);
+    }
+
+    // The threshold-crossing insert
+    send_command(client_fd, BuildInsertCommand("rem_id_trigger", "Txt"));
+    std::string response = read_response(client_fd);
+    EXPECT_NE(response.find("WARNING<OPTIMIZE needed for better searches.>"), std::string::npos)
+        << "OPTIMIZE reminder did not trigger when count reached OPTIMIZE_REM_STARTS_AT.";
+
+    close(client_fd);
+}
+
+// =============================================================================
+// Group 21: OPTIMIZE Resets Reminder
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, Optimize_ResetsReminderThreshold_NextInsertIsClean)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    // Push past threshold to trigger warning
+    for (size_t i = 0; i < schema::OPTIMIZE_REM_STARTS_AT; i++)
+    {
+        send_command(client_fd, BuildInsertCommand("reset_pre_" + std::to_string(i), "Txt"));
+        read_response(client_fd);
+    }
+
+    // Call OPTIMIZE to successfully update last_build_at
+    send_command(client_fd, "OPTIMIZE\n");
+    EXPECT_EQ(read_response(client_fd, 10000), "OPTIMIZE <Successful>\n");
+
+    // Next insert must be clean since vector count is now strictly less than (last_build_at * OPTIMIZE_FACTOR)
+    send_command(client_fd, BuildInsertCommand("reset_post", "Txt"));
+    std::string response = read_response(client_fd);
+    EXPECT_EQ(response.find("WARNING<OPTIMIZE needed for better searches.>"), std::string::npos)
+        << "OPTIMIZE reminder incorrectly triggered immediately after a clean OPTIMIZE operation.";
+
+    close(client_fd);
+}
+
+// =============================================================================
+// Group 22: Reply-Non-Emptiness Regression
+// =============================================================================
+
+TEST_F(VectorServerIntegrationTest, ReplyNonEmptiness_HandledCommandsNeverReturnEmptyString)
+{
+    int client_fd = connect_client(port_);
+    ASSERT_GE(client_fd, 0);
+
+    // Submit a blank command -> Expected to be silently ignored by the accumulator
+    send_command(client_fd, "\n");
+    std::string response = read_response(client_fd, 300);
+    EXPECT_TRUE(response.empty());
+
+    // Submit a handled yet completely malformed command -> Must return a descriptive error, NOT an empty string
+    send_command(client_fd, "INSERT bad_format_id\n");
+    response = read_response(client_fd);
+    EXPECT_FALSE(response.empty())
+        << "Regression: Handled command branch mistakenly returned an empty response string instead of an error message.";
+
+    close(client_fd);
+}
+
+// =============================================================================
+// Group 23: OPTIMIZE Growth-Stage Performance Table (Curiosity)
+// =============================================================================
+
+class VectorServerOptimizeCuriosity : public VectorServerIntegrationTest
+{
+protected:
+    Vector GenerateRandomNormalizedVector(std::mt19937 &rng, size_t idx)
+    {
+        Vector v;
+        v.id = "opt_id_" + std::to_string(idx);
+        v.id.resize(schema::ID_LENGTH, '\0');
+        v.text_length = 5;
+        v.meta_data_count = 0;
+        v.embeddings.resize(schema::DIMENSIONS);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        for (size_t d = 0; d < schema::DIMENSIONS; d++)
+        {
+            v.embeddings[d] = dist(rng);
+        }
+        vs_->normalise_vector(v.embeddings);
+        return v;
+    }
+
+    std::string BuildQueryCommandFromVector(size_t top_k, const Vector &query_vec)
+    {
+        std::ostringstream oss;
+        oss << "QUERY " << top_k << " " << GenerateDimsString();
+        for (size_t i = 0; i < schema::DIMENSIONS; i++)
+        {
+            oss << " " << query_vec.embeddings[i];
+        }
+        oss << "\n";
+        return oss.str();
+    }
+};
+
+TEST_F(VectorServerOptimizeCuriosity, OptimizeGrowthStagePerformance_Informational)
+{
+    std::mt19937 rng(42);
+    size_t current_vector_count = 0;
+
+    // 1. Seed initial baseline via direct memory access to avoid protocol bottleneck
+    for (size_t i = 0; i < kOptimizeTableBaseCount; i++)
+    {
+        vs_->make_entry(GenerateRandomNormalizedVector(rng, current_vector_count++));
+    }
+
+    int fd = connect_client(port_);
+    ASSERT_GE(fd, 0) << "Failed to connect to server for OPTIMIZE test.";
+
+    // Establish clean baseline index via OPTIMIZE
+    send_command(fd, "OPTIMIZE\n");
+    EXPECT_EQ(read_response(fd, 2000000), "OPTIMIZE <Successful>\n");
+
+    // Prepare fixed query vector
+    Vector query_vec = GenerateRandomNormalizedVector(rng, 999999);
+    std::string query_cmd = BuildQueryCommandFromVector(10, query_vec);
+
+    struct StageResult
+    {
+        size_t stage;
+        size_t vector_count;
+        double pre_mean_ms;
+        double post_mean_ms;
+    };
+    std::vector<StageResult> results;
+
+    for (size_t stage = 1; stage <= kOptimizeTableStages; stage++)
+    {
+        // Grow live count directly to test structural mismatch/staleness
+        size_t target_count = static_cast<size_t>(current_vector_count * kOptimizeTableGrowthFactor);
+        while (current_vector_count < target_count)
+        {
+            vs_->make_entry(GenerateRandomNormalizedVector(rng, current_vector_count++));
+        }
+
+        // Pre-OPTIMIZE measurement
+        double pre_sum = 0;
+        for (size_t i = 0; i < kOptimizeTableQueryRepetitions; i++)
+        {
+            auto start = std::chrono::steady_clock::now();
+            send_command(fd, query_cmd);
+            std::string resp = read_response(fd, 5000);
+            auto end = std::chrono::steady_clock::now();
+
+            EXPECT_TRUE(resp.starts_with("QUERY <"));
+            EXPECT_TRUE(resp.ends_with("END\n"));
+
+            pre_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        }
+        double pre_mean_ms = (pre_sum / kOptimizeTableQueryRepetitions) / 1000.0;
+
+        // Call OPTIMIZE
+        send_command(fd, "OPTIMIZE\n");
+        EXPECT_EQ(read_response(fd, 2000000), "OPTIMIZE <Successful>\n");
+
+        // Post-OPTIMIZE measurement
+        double post_sum = 0;
+        for (size_t i = 0; i < kOptimizeTableQueryRepetitions; i++)
+        {
+            auto start = std::chrono::steady_clock::now();
+            send_command(fd, query_cmd);
+            std::string resp = read_response(fd, 5000);
+            auto end = std::chrono::steady_clock::now();
+
+            EXPECT_TRUE(resp.starts_with("QUERY <"));
+            EXPECT_TRUE(resp.ends_with("END\n"));
+
+            post_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        }
+        double post_mean_ms = (post_sum / kOptimizeTableQueryRepetitions) / 1000.0;
+
+        results.push_back({stage, current_vector_count, pre_mean_ms, post_mean_ms});
+    }
+
+    close(fd);
+
+    // Print informational table
+    std::cout << "\n[Curiosity] OPTIMIZE Growth-Stage Performance Table\n";
+    std::cout << "[Curiosity] Machine-dependent informational timings only.\n";
+    std::cout << "[Curiosity] "
+              << std::left << std::setw(8) << "Stage"
+              << std::setw(15) << "Vector Count"
+              << std::setw(20) << "Pre-OPTIMIZE (ms)"
+              << std::setw(20) << "Post-OPTIMIZE (ms)"
+              << "Change\n";
+    std::cout << "[Curiosity] ------------------------------------------------------------------------\n";
+
+    for (const auto &r : results)
+    {
+        double change = r.post_mean_ms - r.pre_mean_ms;
+        double pct = (r.pre_mean_ms > 0) ? (change / r.pre_mean_ms * 100.0) : 0.0;
+
+        std::ostringstream pct_oss;
+        if (pct > 0)
+            pct_oss << "+";
+        pct_oss << std::fixed << std::setprecision(1) << pct << "%";
+
+        std::cout << "[Curiosity] "
+                  << std::left << std::setw(8) << r.stage
+                  << std::setw(15) << r.vector_count
+                  << std::setw(20) << std::fixed << std::setprecision(3) << r.pre_mean_ms
+                  << std::setw(20) << r.post_mean_ms
+                  << pct_oss.str() << "\n";
+    }
+    std::cout << "\n";
 }

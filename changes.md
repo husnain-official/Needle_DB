@@ -1,3 +1,66 @@
+### 11/9/26: 
+- i am starting the clean up of the code, i will read the code and also generate the doxy through Gemini pro extended 3.1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### TO-DO's FINAL FINAL: 
+```
+Currently the OPTIMIZE call is taking well over 15 - 30 minutes at 500k entries, and at the same time, the entire server has to be loked in a mutex, so ALL clients have to wait, so i will do the least effort solution for now, and leave and document the proper solution for v3, that is instead of k-mean for all k, do it for a fixed amount of randomly choosen. 
+```
+I understood the concept and left the implementation for the new ivf.build_() function to AI, due to me not wanting to do it. But i fully understood the concept and reviewed the code as well.
+
+### Spent last 2 days debugging an bug in the vector-server-test-file,
+in the process i ended up upgrading the build_ function to test again a sample of a fixed size. 
+well thats the last, change, now i will go through each code file, tidy things up, add/remove comments, and start writing/generating proper documentation, also will generate a log/notes file, i might or mightnot updoad that one, but it still needs to be generated. 
+- Deleiveralbes:
+1. README(not yet, after the python side has been completed then)
+2. ENGINE.md (protocols, commands, architectural decisions, all important things)
+3. Changes/Notes.md (Updated and merged into one)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### To-Do's, final things for v2 engine, hopefully done in 2 days.
 1. A new "OPTIMIZE" command, which rebuilds the centroids [DONE]
 2. A conditional in "DELETE" which automatically calls compact() [DONE]
@@ -30,9 +93,6 @@ delete might now return such messages as well
 NOTE:1  |   Current implementation of TODO-01 has many problems from a system view, it stops all clients while its running and if this were even thought of for any production code, well i dont really have an analogy, its just bad.
 
 NOTE:2  |   
-
-
-
 
 
 > **Note on AI Generation:** All of the following text is written by AI to maintain a compact and detailed format. If you want to read the original, non-AI wording and follow the author's exact thought process, please revert to the commit made on 23/8/26.
