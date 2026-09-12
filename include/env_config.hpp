@@ -1,12 +1,19 @@
-#ifndef ENV_CONFIG_HPP
-#define ENV_CONFIG_HPP
+/**
+ * @file env_config.hpp
+ * @brief Environment configuration parser for extracting server initialization constraints.
+ */
+#pragma once
 #include <fstream>
 #include <string>
 #include <unordered_map>
 #include "types.h"
 
 // --- Helper
-// Helper to trim spaces, quotes, and carriage returns
+/**
+ * @brief Strips leading and trailing whitespace, quotes, and carriage returns from a string.
+ * @param str Target string requiring character removal.
+ * @return A new string containing the trimmed result, or an empty string if only target characters exist.
+ */
 inline std::string trimEnv(const std::string &str)
 {
     size_t first = str.find_first_not_of(" \t\"\'\r\n");
@@ -19,11 +26,10 @@ inline std::string trimEnv(const std::string &str)
 // --- To_call
 /**
  * @brief Parses an environment file to populate global operational constraints.
- * @param envFilePath File system path targeting the plain text configuration file
- * @param con Configuration structure modified with successfully extracted values
- * @return True upon successful extraction and conversion, false otherwise
- * @warning Catches string-to-integer conversion exceptions internally and returns false silently
- * @note Unmapped keys present in the file are safely ignored without raising errors
+ * @param envFilePath Target filesystem path for the configuration file.
+ * @param con Configuration structure modified with successfully extracted values.
+ * @return True upon successful extraction, false if the file cannot be opened or if an assignment exception occurs.
+ * @note Unmapped keys present in the file are safely ignored without raising errors.
  */
 inline bool loadServerConfig(const std::string &envFilePath, Config &con)
 {
@@ -69,5 +75,3 @@ inline bool loadServerConfig(const std::string &envFilePath, Config &con)
     }
     return true;
 }
-
-#endif // ENV_CONFIG_HPP

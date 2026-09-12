@@ -1,5 +1,8 @@
-#ifndef TYPES
-#define TYPES
+/**
+ * @file types.h
+ * @brief Common carrier structures and conversion utilities used across the engine components.
+ */
+#pragma once
 #include <string>
 #include <map>
 #include <vector>
@@ -10,7 +13,14 @@
  */
 struct Parse_result
 {
+    /**
+     * @brief Flag indicating the success or failure of the parsed operation.
+     */
     bool success;
+
+    /**
+     * @brief Diagnostic message populated upon failure or specific success states.
+     */
     std::string message; // Error if failed.
 };
 
@@ -19,12 +29,20 @@ struct Parse_result
  */
 struct Query_result
 {
+    /**
+     * @brief Computed similarity score between the query and this candidate.
+     */
     float similarity;
-    std::size_t index; // directly realted to database(RAM or DISK ?) indexes
+
+    /**
+     * @brief Raw memory offset of the candidate vector within the active storage array.
+     */
+    std::size_t index;
+
     /**
      * @brief Compares two search results based strictly on their computed similarity scores.
-     * @param other Target result instance to compare against
-     * @return True if the left operand has a strictly greater similarity score
+     * @param other Target result instance to compare against.
+     * @return True if the left operand has a strictly greater similarity score.
      */
     bool operator>(const Query_result &other) const
     {
@@ -33,6 +51,13 @@ struct Query_result
 };
 
 // --- Conversion-Function
+/**
+ * @brief Converts a persistent database record structure into a transient in-memory vector object.
+ * @param entry Source database record extracted from the persistent file.
+ * @param vec Target vector object populated with the extracted data.
+ * @return True upon successful extraction and conversion, false if an exception occurs during copying.
+ * @note Safely bounds ID string extraction against schema limits to prevent buffer overflows.
+ */
 inline bool entry_to_vector(const DB_entry &entry, Vector &vec)
 {
     try
@@ -59,5 +84,3 @@ inline bool entry_to_vector(const DB_entry &entry, Vector &vec)
         return false;
     }
 }
-
-#endif // TYPES

@@ -1,5 +1,5 @@
 #include "file_manager.h"
-// --- Constructor
+// --- Constructor ---
 File_manager::File_manager(const std::string &path, const std::string &text_path, const std::string &index_path) : path_(path), text_file_path_(text_path), index_file_path_(index_path)
 {
     // 1. Initilize elements of 'File_manager' instance being created.
@@ -67,7 +67,7 @@ File_manager::File_manager(const std::string &path, const std::string &text_path
     }
     std::cout << "[File_manager()] | Data-Base path opened successfully\n";
 }
-// --- Header-Related-Functions
+// --- Header-Related-Functions ---
 DB_header File_manager::read_header()
 {
     DB_header h;
@@ -84,11 +84,11 @@ bool File_manager::flush_header()
     file_.flush();
     return file_.good();
 }
-// --- Getters
+// --- Getters ---
 size_t File_manager::get_live_vector_count() const { return header_.live_vector_count; }
 size_t File_manager::get_total_vector_count() const { return header_.total_vector_count; }
 size_t File_manager::get_record_offset(size_t index) const { return (sizeof(DB_header) + index * record_size_); }
-// --- Helpers
+// --- Helpers ---
 bool rename_file(const std::string &old_name, const std::string &new_name)
 {
     std::error_code ec;
@@ -117,7 +117,7 @@ bool File_manager::is_index_populated() const
 {
     return !(std::filesystem::is_empty(index_file_path_));
 }
-// --- Core-Operations
+// --- Core-Operations ---
 bool File_manager::write_entry(DB_entry &entry, std::string &text)
 {
     // NOTE: Responsibility of caller to use a fresh/new entry refrence

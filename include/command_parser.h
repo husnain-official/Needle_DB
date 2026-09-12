@@ -1,64 +1,75 @@
-#ifndef COMMAND_PARSER
-#define COMMAND_PARSER
+/**
+ * @file command_parser.h
+ * @brief Component responsible for decoding raw client network strings into actionable engine operations.
+ */
+#pragma once
 #include "vector_store.h" // For 'Parse_result'
 #include "schema.hpp"
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
+/**
+ * @brief Utility class for decoding line-delimited client network strings into structured database operations.
+ */
 class Parser
 {
 public:
     /**
-     * @brief Extracts identifier, metadata, and embedding components from a raw insertion command string.
-     * @param entry DB_Entey instance populated upon successful extraction
-     * @param extracted_text Raw newline-terminated text string from the client
-     * @param command Raw newline-terminated text string, to be parsed
-     * @return Success boolean paired with a diagnostic message on failure
+     * @brief Parses a client 'INSERT' command string and populates a database record structure for storage.
+     * @param entry Output record structure populated upon successful extraction.
+     * @param extracted_text Output string populated with exactly the extracted text payload.
+     * @param command Raw input command string to be parsed.
+     * @return Carrier structure containing operation success status and a diagnostic message on failure.
      * @note Expects the exact format: INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
-     * @warning Fails securely if the dimensional count or string lengths exceed configured limits
+     * @warning Fails securely if the dimensional count, string lengths, or metadata limits exceed configured schema constraints.
      */
     Parse_result insert_parsing(DB_entry &entry, std::string &extracted_text, const std::string &command);
+
     /**
-     * @brief Decodes network queries into actionable search constraints and target embeddings.
-     * @param v Vector struct populated with query metadata and floats, and other data
-     * @param top_k Output reference for the requested maximum match count
-     * @param command Raw newline-terminated text string, to be parsed
-     * @return Status object indicating structural validity of the protocol text
-     * @note Limits metadata constraints strictly to the configured maximum pairs
+     * @brief Parses a client 'QUERY' command string and populates a transient vector object for similarity searches.
+     * @param v Output vector object populated with query metadata and target embeddings.
+     * @param top_k Output reference populated with the requested maximum match count.
+     * @param command Raw input command string to be parsed.
+     * @return Carrier structure containing operation success status and a diagnostic message on failure.
      * @note Expects the exact format: QUERY <top_k> <dims> [key=val ...] f1 f2 ... fn
-     * @warning Silently clamps top_k to a hardcoded maximum if the requested value is excessively large
+     * @warning Silently clamps the requested match count to the schema maximum if the provided value is excessively large.
      */
     Parse_result query_parsing(Vector &v, size_t &top_k, const std::string &command);
+
     /**
-     * @brief Extracts a target vector identifier from a client deletion command.
-     * @param id Output string populated with the extracted identifier
-     * @param command Raw network string containing the deletion request
-     * @return Success status paired with an empty string or error diagnostic
-     * @warning Does not verify if the extracted identifier actually exists within the storage engine
+     * @brief Parses a client 'DELETE' command string and extracts the target vector identifier.
+     * @param id Output string populated with the extracted identifier.
+     * @param command Raw input command string to be parsed.
+     * @return Carrier structure containing operation success status and a diagnostic message on failure.
      * @note Expects the exact format: DELETE <id>
+     * @warning Does not verify if the extracted identifier actually exists within the storage engine.
      */
     Parse_result delete_parsing(std::string &id, const std::string &command);
+
     /**
-     * @brief Validates syntax for explicit persistence synchronization or memory reload commands.
-     * @param command Raw input string directly from the socket buffer
-     * @param state Boolean flag distinguishing between SAVE (0) and LOAD (1) parsing modes
-     * @param con Global configurations
-     * @return Struct containing operation success status
-     * @warning Mutates the input command string by stripping all whitespace characters internally
+     * @brief Parses a client 'SAVE' or 'LOAD' command string based on the expected state.
+     * @param command Raw input command string to be parsed.
+     * @param state Boolean flag distinguishing between SAVE (0) and LOAD (1) parsing modes.
+     * @return Carrier structure containing operation success status and a diagnostic message on failure.
      * @note Expects the exact format: SAVE or LOAD
      */
     Parse_result save_parsing(std::string &, bool);
 
+    /**
+     * @brief Parses a client 'OPTIMIZE' command string.
+     * @param command Raw input command string to be parsed.
+     * @return Carrier structure containing operation success status and a diagnostic message on failure.
+     * @note Expects the exact format: OPTIMIZE
+     */
     Parse_result optimize_parsing(std::string &);
 
 private:
     // --- Helpers
     /**
      * @brief Scans forward to locate the next space delimiter and calculates the advancement stride.
-     * @param command Target string being parsed
-     * @param index Current cursor position within the string
-     * @param next_space_index Output reference updated to the found delimiter position
-     * @param to_move Output reference tracking the substring length
-     * @warning Sets the delimiter index to std::string::npos if no matching character remains
+     * @param command Raw input command string being parsed.
+     * @param index Current cursor position within the string.
+     * @param next_space_index Output reference populated with the found delimiter position.
+     * @param to_move Output reference populated with the calculated substring length.
+     * @warning Sets the delimiter index to std::string::npos if no matching character remains.
      */
     void next_space_changes(const std::string &, const std::size_t &, std::size_t &, std::size_t &);
 };
-#endif

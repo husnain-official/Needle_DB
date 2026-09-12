@@ -1,5 +1,9 @@
-#ifndef SIMILARITIES
-#define SIMILARITIES
+/**
+ * @file similarities.hpp
+ * @brief Mathematical distance and similarity metric calculations for vector comparisons.
+ * @note Contains stale and dead code (specifically the cosine similarity functions) superseded by optimized inner products.
+ */
+#pragma once
 // --- Similarity functions
 /**
  * @brief Computes the normalized angular distance between two dense embedding arrays.
@@ -78,5 +82,3 @@ inline float dot_similarity(const std::vector<float> &vec_a, const float *vec_b)
 {
     return std::inner_product(vec_a.begin(), vec_a.end(), vec_b, 0.0f);
 }
-
-#endif

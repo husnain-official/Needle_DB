@@ -1,124 +1,4 @@
 #include "command_parser.h"
-/**
- * =========================================================================================
- * @brief Parses an 'INSERT' command string and populates a DB_entry object for database storage.
- *
- * Command Format:
- * INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
- * OLD Format(v1): <id> <dims> [key=val ...] f1 f2 ... fn
- *
- * Rules & Behavior:
- * 1. Command Prefix:
- *    - Must exactly match "INSERT " (case-sensitive, including the trailing space).
- *
- * 2. ID:
- *    - Length must be in the range [1, 32] bytes.
- *    - The parser explicitly copies raw bytes without appending a null terminator.
- *    - Null termination depends strictly on `DB_entry.id` being pre-zeroed before parsing,
- *      which is guaranteed as long as the length is < 32.
- *
- * 3. Text Length & Text:
- *    - `text_length` must be a valid integer in the range [1, 999].
- *    - Strictly checks for valid numeric conversion and prevents silent truncation or trailing garbage.
- *    - Blindly copies exactly `text_length` bytes of memory into the entry's text buffer.
- *
- * 4. Dimensions:
- *    - Validates against both `schema::DIMENSIONS_NO_OF_DIGITS` and `schema::DIMENSIONS`.
- *    - Used strictly for schema validation during insertion; it is not stored persistently in the DB_entry.
- *
- * 5. Meta-Data (Optional):
- *    - Accepts key-value pairs formatted as 'key=value'.
- *    - Key and Value lengths must each be in the range [1, 32] bytes.
- *    - Tracks successful additions via `entry.meta_data_count`.
- *    - Due to a strict equality check, the maximum number of pairs allowed is actually `schema::META_DATA_KP_PAIRS `. If the count reaches more than`schema::META_DATA_KP_PAIRS`, it will return an error message.
- *    - Will explicitly return an error if duplicate '=' signs are provided in a single token (e.g., "k=v=x").
- *
- * 6. Embeddings Loop:
- *    - Must contain floating-point numbers exactly matching `schema::DIMENSIONS`.
- *    - Will explicitly fail on underflow (too few dimensions), overflow (extra dimensions provided),
- *      or if appended non-whitespace garbage characters exist at the end of the payload.
- * =========================================================================================
- * Query:
- * @brief Parses a 'QUERY' command string and populates a Vector object for similarity searches.
- *
- * Command Format:
- * QUERY <top_k> <dims> [key=val ...] f1 f2 ... fn
- *
- * Rules & Behavior:
- * 1. Command Prefix:
- *    - Must exactly match "QUERY " (case-sensitive, including the trailing space).
- *
- * 2. Top-k:
- *    - Must be a valid positive integer (>= 1).
- *    - If the provided value exceeds `schema::MAX_K_SIMILAR`, it is silently clamped to
- *      `schema::MAX_K_SIMILAR` without raising a warning or error.
- *    - Strictly checks for valid numeric conversion and prevents trailing garbage.
- *
- * 3. Dimensions:
- *    - Validates that the provided integer exactly matches `schema::DIMENSIONS`.
- *    - The dimension value itself is used strictly for format validation.
- *
- * 4. Meta-Data (Optional):
- *    - Accepts optional key-value pairs formatted as 'key=value'.
- *    - Will parse up to a maximum of `schema::META_DATA_KP_PAIRS` pairs. If this limit is exceeded, an error is returned.
- *    - Will explicitly return an error if duplicate '=' signs are provided in a single token.
- *    - Key and Value lengths must not exceed `schema::META_DATA_LENGTH`.
- *    - The parser populates `v.metadata` and saves the total parsed count
- *      back to the `Vector` object.
- *
- * 5. Embeddings Loop:
- *    - Must contain floating-point numbers exactly matching `schema::DIMENSIONS`.
- *    - Explicitly fails on underflow (too few dimensions), overflow (extra dimensions provided),
- *      or if appended non-whitespace garbage characters exist at the end of the payload.
- * =========================================================================================
- *  Delete:
- * @brief Parses a 'DELETE' command string and extracts the ID to be deleted.
- *
- * Command Format:
- * DELETE <id>
- *
- * Rules & Behavior:
- * 1. Command Prefix:
- *    - Must exactly match "DELETE " (case-sensitive, including the trailing space).
- * 2. ID Extraction:
- *    - The parser assumes that everything after the space following "DELETE" is the ID.
- *    - It does not check for trailing spaces, carriage returns, or additional arguments.
- *    - Any extra words or whitespace at the end of the command will be absorbed as part of the ID string.
- *    - Length must be in the range [1, schema::ID_LENGTH].
- *
- * Exception Handling:
- *    - Safely catches and handles exceptions to prevent application crashes.
- *    - Note: Passing a command string shorter than 6 characters will bypass the specific format error and trigger the catch block's generic out-of-range error instead.
- * =========================================================================================
- * Save/Load:
- * @brief Parses a 'SAVE' or 'LOAD' command string.
- *
- * Command Format:
- * - SAVE
- * - LOAD
- *
- * Rules & Behavior:
- * 1. Prefix Validation:
- *    - The parser only checks the first 4 characters of the string.
- *    - It strictly requires the string to begin with the exact expected keyword (case-sensitive).
- *    - It does not check overall string length, meaning trailing characters (e.g., "SAVE_FILE")
- *      are ignored and evaluated as valid.
- *
- * 2. State & Keyword Correlation:
- *    - The parser validates the command against the `state` parameter.
- *    - If `state == true`, the command MUST begin with "LOAD".
- *    - If `state == false`, the command MUST begin with "SAVE".
- *    - Passing the wrong keyword for the current state (e.g., "LOAD" when `state == false`)
- *      will fail and return an invalid format error for the expected state.
- *
- * 3. Exception Handling (Short Strings):
- *    - If the input command is shorter than 4 characters, `substr(0, 4)` will throw a
- *      `std::out_of_range` exception.
- *    - This is caught by the generic exception handler, which returns a string exposing the
- *      underlying C++ standard library error to the user rather than a standard syntax error.
- * =========================================================================================
- **/
-
 //---------------------------- Parsing For 'Vector_Server' ----------------------------------
 Parse_result Parser::insert_parsing(DB_entry &entry, std::string &extracted_text, const std::string &command)
 {
@@ -306,6 +186,7 @@ Parse_result Parser::insert_parsing(DB_entry &entry, std::string &extracted_text
         return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
     }
 }
+
 Parse_result Parser::query_parsing(Vector &v, size_t &top_k, const std::string &command)
 {
     try
@@ -461,6 +342,7 @@ Parse_result Parser::query_parsing(Vector &v, size_t &top_k, const std::string &
         return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
     }
 }
+
 Parse_result Parser::delete_parsing(std::string &id, const std::string &command)
 {
     try
@@ -497,6 +379,7 @@ Parse_result Parser::delete_parsing(std::string &id, const std::string &command)
         return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
     }
 }
+
 Parse_result Parser::save_parsing(std::string &command, bool state)
 {
     try
@@ -511,6 +394,7 @@ Parse_result Parser::save_parsing(std::string &command, bool state)
         return {false, std::string("ERROR <Unexpected error: ") + e.what() + ">\n"};
     }
 }
+
 Parse_result Parser::optimize_parsing(std::string &command)
 {
     try

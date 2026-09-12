@@ -1,35 +1,36 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### 11/9/26: 
 - i am starting the clean up of the code, i will read the code and also generate the doxy through Gemini pro extended 3.1
 
+- schema.hpp, read and doxy added.
+- env_config.hpp, read and doxy added.
+- types.hpp, read and doxy added.
+- command_parser.h\cpp, read and doxy added.
+- file_manager.h\cpp, read and doxy added.
+- vector_server.h\cpp, read and doxy added.
+- vector_store.h\cpp, read and doxy added.
+
+- Confirmed all tests are being passed without any errors/bugs.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- Generated engine.md, with all protocol info, commands, schema and all engine's internal knowledge.
 
 
 ### TO-DO's FINAL FINAL: 

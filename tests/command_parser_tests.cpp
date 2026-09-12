@@ -199,8 +199,8 @@ TEST_F(CommandParserTest, InsertParsing_TextWithEmbeddedSpaces_PreservedExactly)
     std::string cmd = BuildValidInsertCommand("id", std::to_string(text_with_spaces.size()), text_with_spaces, std::to_string(schema::DIMENSIONS), {}, schema::DIMENSIONS);
     Parse_result res = parser.insert_parsing(entry, text, cmd);
     EXPECT_TRUE(res.success);
-    // Convert back to string using exactly text_length
-    std::string extracted(text, entry.text_length);
+    // FIXED: Use the underlying char buffer instead of the substring pos constructor
+    std::string extracted(text.data(), entry.text_length);
     EXPECT_EQ(extracted, text_with_spaces);
 }
 
@@ -411,7 +411,9 @@ TEST_F(CommandParserTest, InsertParsing_FullVerification_Success)
 
     // Check Text
     EXPECT_EQ(entry.text_length, text_.size());
-    std::string parsed_text(text, entry.text_length);
+
+    // FIXED: Use the underlying char buffer instead of the substring pos constructor
+    std::string parsed_text(text.data(), entry.text_length);
     EXPECT_EQ(parsed_text, text_);
 
     // Check Meta
@@ -420,8 +422,9 @@ TEST_F(CommandParserTest, InsertParsing_FullVerification_Success)
     {
         std::string expected_key(schema::META_DATA_LENGTH, 'A' + i);
         std::string expected_val(schema::META_DATA_LENGTH, 'a' + i);
-        EXPECT_STREQ(entry.meta_data[i].key, expected_key.c_str());
-        EXPECT_STREQ(entry.meta_data[i].value, expected_val.c_str());
+        // FIXED: Replaced EXPECT_STREQ with string reconstruction to avoid missing null-terminator overruns
+        EXPECT_EQ(std::string(entry.meta_data[i].key, schema::META_DATA_LENGTH), expected_key);
+        EXPECT_EQ(std::string(entry.meta_data[i].value, schema::META_DATA_LENGTH), expected_val);
     }
 
     // Check Embeddings
