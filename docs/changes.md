@@ -1,6 +1,8 @@
+1. Moved src, include, tests, dockerfile.cpp, cmakelists.txt into new structre of project, the inner links, in the files are to be updated at a later date.
 
+2. Protocol.md, still had old/stale data from v1, so removed data from it and deleted it, as engine.md speicifies everything internal about the engine not just the protocol, do
 
-
+3. 
 
 
 

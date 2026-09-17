@@ -1,6 +1,37 @@
+
+### New Project Structure:
+meridian/                      (or whatever the final name becomes)
+├── services/
+│   ├── engine/                 ← current src/, include/, tests/, CMakeLists.txt, Dockerfile.cpp
+│   │   ├── src/
+│   │   ├── include/
+│   │   ├── tests/
+│   │   ├── CMakeLists.txt
+│   │   └── Dockerfile
+│   ├── client/                 ← current client/, pipeline/, Dockerfile.python
+│   │   ├── app/                 (FastAPI app)
+│   │   ├── pipeline/            (embedding/RAG pipeline)
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   └── ui/                     ← new HTML/CSS/JS/Tailwind
+│       ├── src/
+│       ├── public/
+│       └── Dockerfile
+├── docs/                       ← README.md, engine.md, changes.md, assets/ (screenshots, diagrams)
+├── data/                       ← see note below
+├── docker-compose.yml          ← orchestrates all three services together
+├── .env.example
+├── .gitignore
+└── README.md
+
+
+---
+
+---
+
 ### 4/9/26:
-1. I think the compact() function is not in use anywhere currently, add some command for it, or hard code the logic such that if soft-deleated entries exceed a certain amount, a compact function will be called automatically, i think the best place for this to happed will be in delete command block in server.handel_client, as its the natural place, and we can also print out a message that it exceeded to engine make a complete new database. 
-2. Tests expect "OK\n" which is not shifted to, more descriptive state of the engine, so update the tests accordingly.
+1. I think the compact() function is not in use anywhere currently, add some command for it, or hard code the logic such that if soft-deleated entries exceed a certain amount, a compact function will be called automatically, i think the best place for this to happed will be in delete command block in server.handel_client, as its the natural place, and we can also print out a message that it exceeded to engine make a complete new database. [[DONE]]
+2. Tests expect "OK\n" which is not shifted to, more descriptive state of the engine, so update the tests accordingly. [[DONE]]
 
 ### 5/9/10: 10 ? not 26
 1. Somehow i hate working on vector_store files the most, each other file and part of this project, i love spending my time on, but for some reason vector_store does not get any love, i just dont like that file :), its not even a long file its just like 300lines of code, but its just soo mixed together and just a mess.
@@ -25,18 +56,6 @@ NOTE:9  |   I will just make the ivf centroids persistent and stop the automatic
 
 
 ### 8/9/26:
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 > **⚠️ AI-Generated Document Warning**

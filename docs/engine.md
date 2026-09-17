@@ -119,7 +119,7 @@ INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
 **Responses:**
 *   Success: `INSERT <Successful>\n`
 *   Warning (threshold met): `INSERT <Successful>, WARNING<OPTIMIZE better for needed searches.>\n`
-*   Error: `ERROR <...>\n` (e.g., `ERROR <Id already database exists in>`, `ERROR <Vector Failed Normalization>`)
+*   Error: `ERROR <...>\n` (e.g., `ERROR <Id already exists in database>`, `ERROR <Vector Failed Normalization>`)
 
 ### `QUERY`
 **Request:**
@@ -145,7 +145,7 @@ DELETE <id>
 *   Success: `DELETE <Successful>\n`
 *   Success with Compaction: `DELETE <Successful>, Compaction<Successful>\n`
 *   Warning: `DELETE <Successful>, WARNING <Database compaction failed>.\n`
-*   Error: `ERROR <...>\n` (e.g., `ERROR <Could Database delete find in not to vector>`)
+*   Error: `ERROR <...>\n` (e.g., `ERROR <Database could not find entry to delete>`)
 
 ### Administrative Commands
 *   **`SAVE`**: Flushes the active header (including live/total counts) to disk. Returns `SAVE <Successful>\n`.
