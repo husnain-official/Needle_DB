@@ -1,3 +1,9 @@
+### Latest:
+- Ok now we have a way to sync the python side with the engine at runtime. 
+- What is the next thing to work on ? 
+- vector_client.py will need the most work, as all protocols have to be updated, so work on it first. 
+- First goal is to update all files, and run the whole program to test it, and then think about the multi-clinet process.
+- 
 
 ### New Project Structure:
 meridian/                      (or whatever the final name becomes)

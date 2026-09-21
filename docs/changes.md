@@ -1,22 +1,20 @@
+### Latest:
+1. Created schema_loader.py, which uses regular expression to search the schema.hpp, to isolate the namespace schema, and derive the constexptrs from it. NOTE: Single Source Of Truth, Rule maintained.
+NOTE: This forces a runtime read, whenever the system starts this file has to run, so the python module has the variables it needs.
+
+2. 
+NOTE: State properly that python side was written with 50/50 work me and AI, too burned out from this project to work fully on it anymore. 
+
+
+
+
+
+
+###
+
 1. Moved src, include, tests, dockerfile.cpp, cmakelists.txt into new structre of project, the inner links, in the files are to be updated at a later date.
 
 2. Protocol.md, still had old/stale data from v1, so removed data from it and deleted it, as engine.md speicifies everything internal about the engine not just the protocol, do
-
-3. 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### 11/9/26: 
 - i am starting the clean up of the code, i will read the code and also generate the doxy through Gemini pro extended 3.1
