@@ -1,5 +1,5 @@
 # =============================================================================
-# pipeline/searcher.py
+# client/pipeline/searcher.py
 # Semantic search helper — embeds a query and searches the vector DB.
 #
 # This is a thin wrapper around Client.query() that handles embedding
@@ -11,48 +11,62 @@
 # =============================================================================
 
 from pipeline.embedder import embed
+from schema import PY_SCHEMA
 
-def semantic_search( client, query_text: str, k: int = 5, filters: dict = None,) -> list:
+def semantic_search(
+    client,
+    query_text: str,
+    k: int = PY_SCHEMA.DEFAULT_TOP_K,
+    filters: dict = None,
+) -> list[tuple[str, float, str]]:
     """
     Embeds query_text and retrieves the top-k most similar vectors.
 
     Args:
         client:     connected Client instance
         query_text: plain English query string
-        k:          number of results to return (default 5)
-        filters:    optional metadata filter dict — up to 3 key=value pairs
+        k:          number of results to return (default 5, must be
+                    between 1 and the engine's MAX_K_SIMILAR)
+        filters:    optional metadata filter dict — up to
+                    schema.META_DATA_KP_PAIRS (3) key=value pairs
                     e.g. {"source": "ai_doc"}
                     e.g. {"source": "wikipedia", "year": "2024"}
 
     Returns:
-        list of (doc_id, score) tuples sorted by score descending
+        list of (doc_id, score, text) tuples, in the order returned by
+        the engine. Each result's originally stored text is included —
+        the v2 protocol adds this field to QUERY results; v1 did not.
+
+    Raises:
+        ValueError: query_text failed embedding, or k/filters/vector
+            failed client-side validation inside Client.query().
+        NeedleDBError: the engine returned an ERROR response.
+        EmbeddingDimensionError: the configured embedding model's output
+            doesn't match the engine's fixed vector size (see
+            pipeline/embedder.py).
     """
     print(f"\n[searcher] Query : '{query_text}'")
 
-    # ── BUG FIX: original code used 'k' as loop variable inside the
-    #    filter_display comprehension, shadowing the k parameter.
-    #    Renamed to key_name to avoid the collision.
-    if filters:
-        filter_display = ", ".join(
-            f"{key_name}={val}" for key_name, val in filters.items()
-        )
-        print(f"[searcher] Filter: {filter_display}")
-
-    vector  = embed(query_text)
+    vector = embed(query_text)
     results = client.query(vector, k=k, filters=filters)
     return results
 
 
-def print_results(results: list):
+def print_results(results: list[tuple[str, float, str]]):
     """
-    Pretty-prints a list of (doc_id, score) tuples.
+    Pretty-prints a list of (doc_id, score, text) tuples, including a
+    short preview of each result's stored text.
 
     Args:
-        results: list of (doc_id, score) tuples from semantic_search()
+        results: list of (doc_id, score, text) tuples from semantic_search()
     """
     if not results:
         print("  No results returned.")
         return
+
     print(f"\n  Top {len(results)} result(s):")
-    for rank, (doc_id, score) in enumerate(results, 1):
+    for rank, (doc_id, score, text) in enumerate(results, 1):
         print(f"  #{rank:<3} {doc_id:<35} similarity: {score:.4f}")
+        if text:
+            preview = text if len(text) <= PY_SCHEMA.TEXT_PREVIEW_CHARS else text[:PY_SCHEMA.TEXT_PREVIEW_CHARS - 3] + "..."
+            print(f"        {preview}")

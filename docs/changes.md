@@ -1,16 +1,19 @@
 ### Latest:
+
+1. Updated searcher.py, embedder.py, 
+2. Creaed a schema file for the python backend. 
+3. Moved all constants source to that file. 
+4. 
+
+
+###  2
 1. Created schema_loader.py, which uses regular expression to search the schema.hpp, to isolate the namespace schema, and derive the constexptrs from it. NOTE: Single Source Of Truth, Rule maintained.
 NOTE: This forces a runtime read, whenever the system starts this file has to run, so the python module has the variables it needs.
 
 2. 
 NOTE: State properly that python side was written with 50/50 work me and AI, too burned out from this project to work fully on it anymore. 
 
-
-
-
-
-
-###
+###  1
 
 1. Moved src, include, tests, dockerfile.cpp, cmakelists.txt into new structre of project, the inner links, in the files are to be updated at a later date.
 

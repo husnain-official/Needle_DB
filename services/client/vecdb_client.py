@@ -43,6 +43,7 @@
 
 import socket
 from types import SimpleNamespace
+from schema import PY_SCHEMA
 
 
 class _Error(Exception):
@@ -68,8 +69,8 @@ class Client:
         client.disconnect()
     """
 
-    DEFAULT_TIMEOUT = 15        # seconds; fine for INSERT/QUERY/DELETE/SAVE
-    LONG_OP_TIMEOUT = 300       # seconds; LOAD/OPTIMIZE can take minutes
+    DEFAULT_TIMEOUT = PY_SCHEMA.DEFAULT_TIMEOUT  # seconds; fine for INSERT/QUERY/DELETE/SAVE
+    LONG_OP_TIMEOUT = PY_SCHEMA.LONG_OP_TIMEOUT  # seconds; LOAD/OPTIMIZE can take minutes
 
     def __init__(self):
         self.sock = None
@@ -234,7 +235,7 @@ class Client:
             buffer = b""
             while True:
                 try:
-                    chunk = self.sock.recv(8192)
+                    chunk = self.sock.recv(PY_SCHEMA.RECV_BUFFER_BYTESs)
                 except socket.timeout:
                     raise TimeoutError(
                         "Server did not respond in time. "
