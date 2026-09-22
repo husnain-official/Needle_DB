@@ -232,8 +232,8 @@ bool File_manager::compact()
     try
     {
         // 1. Create a temporary new file
-        std::string temp_path = "./data/temp_database.vdb";
-        std::string temp_text_path = "./data/temp_text_database.vdb";
+        std::string temp_path = "./temp_database.vdb";
+        std::string temp_text_path = "./temp_text_database.vdb";
         std::fstream new_file;
         std::fstream new_text_file;
         new_file.open(temp_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);

@@ -106,17 +106,17 @@ struct Config
     /**
      * @brief Target filesystem path for the persistent entry database file.
      */
-    std::string vecdb_entry_file_path = "./data/database_entry.vdb";
+    std::string vecdb_entry_file_path = "./services/engine/data/database_entry.vdb";
 
     /**
      * @brief Target filesystem path for the persistent text payload database file.
      */
-    std::string vecdb_text_file_path = "./data/database_text.vdb";
+    std::string vecdb_text_file_path = "./services/engine/data/database_text.vdb";
 
     /**
      * @brief Target filesystem path for the persistent IVF index topology file.
      */
-    std::string vecdb_index_file_path = "./data/database_index.vdb";
+    std::string vecdb_index_file_path = "./services/engine/data/database_index.vdb";
 };
 
 //  ---------------------------------------- Data-Base-Schema ----------------------------------------

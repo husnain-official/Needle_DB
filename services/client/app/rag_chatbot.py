@@ -3,27 +3,41 @@
 #
 # Flow for every question:
 #   1. embed(question)                  → dim query vector
-#   2. client.query(vector, k=5)        → top-5 (doc_id, score) from DataBase
-#   3. filter by min_score              → drop irrelevant chunks
-#   4. look up chunk text locally       → build context string
-#   5. call Local LLM model             → grounded answer from context only
+#   2. client.query(vector, k=5)        → top-k (doc_id, score, text) from DataBase
+#   3. filter by min_score              → drop irrelevant chunks (client-side —
+#                                          the engine's QUERY protocol has no
+#                                          score-threshold parameter, see engine.md)
+#   4. call Local LLM model             → grounded answer from context only
 
 import os
 import time
-import json
 import ollama
 from dotenv import load_dotenv
 
-from client.vecdb_client import Client
+from vecdb_client import Client
 from pipeline.embedder import embed
-from pipeline.ingestor import chunk_text, read_file, SUPPORTED
+from pipeline.ingestor import (
+    chunk_text,
+    read_file,
+    ingest_folder,
+    _sanitize_for_wire,
+    _truncate_utf8,
+    _build_doc_id,
+)
+from schema import PY_SCHEMA
+from schema_loader import load_cpp_schema
 
 load_dotenv()
 
 # Keeps last N exchanges to avoid exceeding GPT context window.
 # 1 turn = 1 user message + 1 assistant message = 2 entries.
-MAX_HISTORY_TURNS = 6
-STORE_FILE = os.getenv("STORE_FILE")
+MAX_HISTORY_TURNS = PY_SCHEMA.DEFAULT_MAX_HISTORY_TURNS
+
+# host/port default to the environment, same "no default, no fallback"
+# philosophy pipeline/embedder.py uses for EMBEDDING_MODEL: if unset, connect()
+# will fail loudly rather than silently pointing at the wrong engine.
+ENGINE_HOST = os.getenv("ENGINE_HOST")
+ENGINE_PORT = int(os.getenv("ENGINE_PORT")) if os.getenv("ENGINE_PORT") else None
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL")
 
 
@@ -32,32 +46,43 @@ class RAGChatbot:
     Retrieval-Augmented Generation chatbot backed by vector DataBase.
 
     Quick start:
-        bot = RAGChatbot("10.1.177.21", 8080)
+        bot = RAGChatbot()   # host/port from ENGINE_HOST / ENGINE_PORT env vars
         bot.connect()
         bot.load_knowledge_base("data/documents")
         answer, sources = bot.answer_with_sources("What is machine learning?")
         bot.disconnect()
     """
 
-    def __init__(self, host, port, top_k=5, min_score=0.55):
+    def __init__(self, host=None, port=None, top_k=None, min_score=None):
         """
         Args:
-            host:      server IP
-            port:      server port (usually 8080)
+            host:      server IP (default: ENGINE_HOST env var)
+            port:      server port, usually 8080 (default: ENGINE_PORT env var)
             top_k:     number of chunks to retrieve per query
+                       (default: PY_SCHEMA.DEFAULT_TOP_K)
             min_score: minimum cosine similarity to accept a chunk as context.
-                       Chunks below this are silently dropped.
+                       Chunks below this are silently dropped
+                       (default: PY_SCHEMA.DEFAULT_MIN_SCORE). This check stays
+                       client-side — the engine's QUERY protocol only takes
+                       top_k/dims/metadata filters, no similarity threshold.
         """
-        self.host      = host
-        self.port      = port
-        self.top_k     = top_k
-        self.min_score = min_score
+        self.host      = host if host is not None else ENGINE_HOST
+        self.port      = port if port is not None else ENGINE_PORT
+        self.top_k     = top_k if top_k is not None else PY_SCHEMA.DEFAULT_TOP_K
+        self.min_score = min_score if min_score is not None else PY_SCHEMA.DEFAULT_MIN_SCORE
         self.client    = Client()
 
-        # doc_id → original chunk text
-        # server returns IDs + scores only, not text.
-        # We keep text locally to build GPT prompts.
-        self.chunk_store: dict[str, str] = {}
+        # Populated in connect() via schema_loader.load_cpp_schema() — required
+        # by Client.connect()/insert()/query() for all wire-format validation.
+        self.engine_schema = None
+
+        # Lightweight per-document chunk counts (filename → chunk count) for
+        # UIs that want a "loaded documents" table — NOT the chunk text
+        # itself (v2 doesn't cache that; QUERY already returns it). Like
+        # everything else here, this is session-scoped: nothing is persisted
+        # to disk, so it resets on every connect() and won't reflect data
+        # already in the engine from a prior session until reloaded.
+        self.loaded_documents: dict[str, int] = {}
 
         # conversation history for multi-turn Q&A
         self.history: list[dict] = []
@@ -69,6 +94,7 @@ class RAGChatbot:
             "total_queries":     0,
             "total_latency_ms":  0.0,
             "no_context_count":  0,
+            "kb_chunks_loaded":  0,
         }
 
     # ─────────────────────────────────────────────────────────────────
@@ -76,26 +102,14 @@ class RAGChatbot:
     # ─────────────────────────────────────────────────────────────────
 
     def connect(self):
-        """Connect to the C++ server and load local chunk mapping."""
-        self.client.connect(self.host, self.port)
-        
-        # FIXED: Load chunk store from disk if it exists to match persisted DB state
-        if os.path.exists(STORE_FILE):
-            try:
-                with open(STORE_FILE, "r", encoding="utf-8") as f:
-                    self.chunk_store = json.load(f)
-                print(f"[RAGChatbot] Loaded {len(self.chunk_store)} cached text chunks from disk.")
-            except Exception as e:
-                print(f"[RAGChatbot] WARNING: Could not load local chunk cache: {e}")
-                
+        """Load the engine's schema and connect to the C++ engine."""
+        self.engine_schema = load_cpp_schema()
+        self.client.connect(self.host, self.port, self.engine_schema)
         print(f"RAGChatbot connected to {self.host}:{self.port}")
 
     def disconnect(self):
-        """Save DB state, persist local chunk mapping, and close connection."""
+        """Flush the engine's active header to disk and close the connection."""
         self.client.save()
-        
-        self._save_chunk_store()
-
         self.client.disconnect()
         print("RAGChatbot disconnected.")
 
@@ -103,75 +117,32 @@ class RAGChatbot:
     # KNOWLEDGE BASE LOADING
     # ─────────────────────────────────────────────────────────────────
 
-    def load_knowledge_base(self, folder_path, chunk_size=150):
+    def load_knowledge_base(self, folder_path, chunk_size=None):
         """
-        Reads all supported files (.txt, .pdf, .docx) in folder_path,
-        chunks each file, embeds every chunk, inserts into DB,
-        and stores chunk text locally for prompt building.
+        Reads all supported files (.txt, .pdf, .docx) in folder_path, chunks
+        each file, embeds every chunk, and inserts it into the DB.
+
+        Delegates to pipeline.ingestor.ingest_folder(), which builds
+        schema-aware doc IDs/metadata and validates every chunk against
+        self.engine_schema before sending it to the engine — text no longer
+        needs to be cached locally, since v2 QUERY results already include it.
 
         Safe to call more than once — additional docs are added each time.
 
         Args:
             folder_path: path to folder containing knowledge base files
-            chunk_size:  words per chunk (default 150)
+            chunk_size:  words per chunk (default: PY_SCHEMA.DEFAULT_CHUNK_SIZE)
         """
         print(f"\nLoading knowledge base from '{folder_path}'...")
 
-        if not os.path.exists(folder_path):
-            print(f"ERROR: folder '{folder_path}' not found.")
-            return
+        size = chunk_size if chunk_size is not None else PY_SCHEMA.DEFAULT_CHUNK_SIZE
+        results = ingest_folder(self.client, folder_path, self.engine_schema, size)
 
-        files = [
-            f for f in os.listdir(folder_path)
-            if os.path.splitext(f)[1].lower() in SUPPORTED
-        ]
-
-        if not files:
-            print(f"No supported files found. Supported: {', '.join(sorted(SUPPORTED))}")
-            return
-
-        print(f"Found {len(files)} file(s): {files}\n")
-        total_chunks = 0
-
-        for filename in files:
-            filepath    = os.path.join(folder_path, filename)
-            source_name = os.path.splitext(filename)[0][:32]
-
-            try:
-                text = read_file(filepath)
-            except Exception as e:
-                print(f"  SKIP '{filename}': {e}")
-                continue
-
-            if not text.strip():
-                print(f"  SKIP '{filename}': no extractable text.")
-                continue
-
-            chunks = chunk_text(text, chunk_size)
-            print(f"  '{filename}' → {len(chunks)} chunk(s)")
-
-            for i, chunk in enumerate(chunks):
-                doc_id = f"{source_name[:20]}_chunk_{i}"
-                doc_id = doc_id[:32]
-
-                metadata = {
-                    "source":   source_name,
-                    "chunk_id": str(i),
-                }
-
-                vector   = embed(chunk)
-                response = self.client.insert(doc_id, vector, metadata=metadata)
-
-                if "OK" not in response:
-                    print(f"    WARNING: unexpected response for {doc_id}: {response}")
-
-                self.chunk_store[doc_id] = chunk
-                total_chunks += 1
-
-        print(f"\nKnowledge base ready — {total_chunks} chunk(s) loaded into DB.")
-        # NEW: Save immediately after loading the folder
-        if total_chunks > 0:
-            self._save_chunk_store()
+        total_chunks = sum(len(ids) for ids in results.values())
+        self.stats["kb_chunks_loaded"] += total_chunks
+        for filename, ids in results.items():
+            if ids:
+                self.loaded_documents[filename] = self.loaded_documents.get(filename, 0) + len(ids)
 
     # ─────────────────────────────────────────────────────────────────
     # INTERNAL HELPERS
@@ -179,8 +150,11 @@ class RAGChatbot:
 
     def _retrieve(self, question, filters=None):
         """
-        Embeds question, queries DB, applies min_score filter,
-        looks up chunk text locally.
+        Embeds question, queries DB, applies min_score filter.
+
+        v2: client.query() already returns (doc_id, score, text) tuples —
+        the engine's QUERY response carries each chunk's stored text, so
+        there's no local chunk_store lookup anymore.
 
         Returns list of (doc_id, score, chunk_text).
         """
@@ -188,10 +162,9 @@ class RAGChatbot:
         results = self.client.query(vector, k=self.top_k, filters=filters)
 
         retrieved = []
-        for doc_id, score in results:
+        for doc_id, score, text in results:
             if score < self.min_score:
                 continue
-            text = self.chunk_store.get(doc_id, "")
             if text:
                 retrieved.append((doc_id, score, text))
 
@@ -235,8 +208,8 @@ class RAGChatbot:
     def _call_local_llm(self, system_prompt, current_user_payload):
         """Calls local Ollama daemon using Qwen 2.5 3B with explicit message context handling."""
         messages = (
-            [{"role": "system", "content": system_prompt}] 
-            + self.history 
+            [{"role": "system", "content": system_prompt}]
+            + self.history
             + [{"role": "user", "content": current_user_payload}]
         )
         try:
@@ -252,18 +225,6 @@ class RAGChatbot:
             return response['message']['content'].strip()
         except Exception as e:
             return f"ERROR calling local Ollama daemon: {e}"
-
-    def _save_chunk_store(self):
-        """Helper to safely serialize the local chunk store to disk."""
-        try:
-            if STORE_FILE:
-                # Ensure the directory exists before saving
-                os.makedirs(os.path.dirname(STORE_FILE), exist_ok=True)
-                with open(STORE_FILE, "w", encoding="utf-8") as f:
-                    json.dump(self.chunk_store, f, ensure_ascii=False, indent=2)
-                print("[RAGChatbot] Safely synchronized local chunk store to disk.")
-        except Exception as e:
-            print(f"[RAGChatbot] ERROR saving chunk store to disk: {e}")
 
     # ─────────────────────────────────────────────────────────────────
     # PUBLIC API
@@ -289,7 +250,7 @@ class RAGChatbot:
 
         # Dispatch execution payload directly to local model container
         answer_text = self._call_local_llm(system_prompt, user_prompt)
-        
+
         # Append only pure semantic variables to conversational history state
         self.history.append({"role": "user", "content": question})
         self.history.append({"role": "assistant", "content": answer_text})
@@ -329,20 +290,27 @@ class RAGChatbot:
         print(f"  Total queries answered  : {n}")
         print(f"  No-context responses    : {self.stats['no_context_count']}")
         print(f"  Avg end-to-end latency  : {avg:.0f} ms")
-        print(f"  KB chunks loaded        : {len(self.chunk_store)}")
+        print(f"  KB chunks loaded        : {self.stats['kb_chunks_loaded']}")
         print("─────────────────────────────────────────────────────")
 
     # ── ADDITION 3: single-file ingestion shortcut ────────────────────
-    def add_document(self, filepath, chunk_size=150, display_name=None):
+    def add_document(self, filepath, chunk_size=None, display_name=None):
         """
         Adds a single file to the knowledge base without scanning a folder.
         Useful for adding one document after the KB is already loaded.
 
+        Mirrors pipeline.ingestor.ingest_file() (same schema-aware doc_id /
+        metadata construction, same per-chunk TEXT_MAX_LENGTH check), with
+        one addition ingest_file() doesn't support: an optional display_name
+        to label the source as something other than the file's real name.
+
         Example:
             bot.add_document("data/new_paper.pdf")
         """
-        filename    = display_name or os.path.basename(filepath)
-        source_name = os.path.splitext(filename)[0][:32]
+        filename  = display_name or os.path.basename(filepath)
+        base_name = _sanitize_for_wire(os.path.splitext(filename)[0])
+        source_for_metadata = _truncate_utf8(base_name, self.engine_schema.META_DATA_LENGTH)
+        size = chunk_size if chunk_size is not None else PY_SCHEMA.DEFAULT_CHUNK_SIZE
 
         try:
             text = read_file(filepath)
@@ -354,19 +322,33 @@ class RAGChatbot:
             print(f"SKIP: no extractable text in '{filepath}'.")
             return
 
-        chunks = chunk_text(text, chunk_size)
+        chunks = chunk_text(text, size)
         print(f"Adding '{filename}' → {len(chunks)} chunk(s)")
 
+        inserted = 0
         for i, chunk in enumerate(chunks):
-            doc_id = f"{source_name[:20]}_chunk_{i}"
-            doc_id = doc_id[:32]
-            metadata = {"source": source_name, "chunk_id": str(i)}
-            vector   = embed(chunk)
-            response = self.client.insert(doc_id, vector, metadata=metadata)
-            if "OK" not in response:
-                print(f"  WARNING {doc_id}: {response}")
-            self.chunk_store[doc_id] = chunk
+            chunk_bytes = len(chunk.encode("utf-8"))
+            if chunk_bytes > self.engine_schema.TEXT_MAX_LENGTH:
+                print(
+                    f"  [{i+1}/{len(chunks)}] SKIP — chunk is {chunk_bytes} bytes, "
+                    f"exceeds engine limit of {self.engine_schema.TEXT_MAX_LENGTH} bytes."
+                )
+                continue
 
-        print(f"Done. {len(chunks)} chunk(s) added.")
-        if chunks:
-            self._save_chunk_store()
+            doc_id   = _build_doc_id(base_name, i, self.engine_schema)
+            metadata = {"source": source_for_metadata, "chunk_id": str(i)}
+
+            try:
+                vector   = embed(chunk)
+                response = self.client.insert(doc_id, chunk, vector, metadata=metadata)
+            except Exception as e:
+                print(f"  [{i+1}/{len(chunks)}] ERROR inserting '{doc_id}': {e}")
+                continue
+
+            print(f"  [{i+1}/{len(chunks)}] Server → {response.strip()}")
+            inserted += 1
+
+        self.stats["kb_chunks_loaded"] += inserted
+        if inserted:
+            self.loaded_documents[filename] = self.loaded_documents.get(filename, 0) + inserted
+        print(f"Done. {inserted}/{len(chunks)} chunk(s) added.")

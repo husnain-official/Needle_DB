@@ -36,4 +36,8 @@ PY_SCHEMA = SimpleNamespace(
     # ── pipeline/ingestor.py — ingestion defaults ─────────────────────
     DEFAULT_CHUNK_SIZE=150,          # words per chunk
     SUPPORTED_EXTENSIONS={".txt", ".pdf", ".docx"},
+
+    # ── app/rag_chatbot.py — RAG chatbot defaults ─────────────────────
+    DEFAULT_MIN_SCORE=0.55,          # min cosine similarity to keep a retrieved chunk
+    DEFAULT_MAX_HISTORY_TURNS=6,     # conversation turns kept (1 turn = user + assistant)
 )

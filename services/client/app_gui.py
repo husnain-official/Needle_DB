@@ -26,9 +26,12 @@ def get_bot_class():
 # ────────────────────────────────────────────────────────────────────
 # CONFIG — change these to match servers IP
 # ────────────────────────────────────────────────────────────────────
-DEFAULT_IP   = os.getenv("IP")
-DEFAULT_PORT = os.getenv("PORT")
-DEFAULT_PORT = int(DEFAULT_PORT)
+# Fallbacks here are just so the sidebar widgets have something valid to
+# render — RAGChatbot itself still applies its own "no default" env lookup
+# (ENGINE_HOST/ENGINE_PORT) if you connect without typing anything in.
+DEFAULT_IP   = os.getenv("IP") or ""
+_env_port    = os.getenv("PORT")
+DEFAULT_PORT = int(_env_port) if _env_port else 8080
 KB_FOLDER    = os.getenv("DOC_PATH")
 
 
@@ -57,7 +60,7 @@ init_state()
 def get_stats():
     """Returns stats dict safely — zeros if bot not connected."""
     if st.session_state.bot is None:
-        return {"total_queries": 0, "total_latency_ms": 0.0, "no_context_count": 0}
+        return {"total_queries": 0, "total_latency_ms": 0.0, "no_context_count": 0, "kb_chunks_loaded": 0}
     return st.session_state.bot.stats
 
 
@@ -68,26 +71,27 @@ def avg_latency_ms():
 
 
 def chunk_count():
+    """
+    Chunks loaded THIS session — v2 has no local text cache and the wire
+    protocol has no command that returns the engine's live vector count
+    (see engine.md), so this can under-report on a DB that already had
+    data before you connected. It's a display convenience, not ground truth.
+    """
     if st.session_state.bot is None:
         return 0
-    return len(st.session_state.bot.chunk_store)
+    return st.session_state.bot.stats.get("kb_chunks_loaded", 0)
 
 
 def kb_summary():
     """
     Returns a list of dicts: {filename, chunks, filetype}
-    derived from chunk_store keys.
+    derived from bot.loaded_documents (filename → chunk count).
+    Same session-only caveat as chunk_count().
     """
     if st.session_state.bot is None:
         return []
-    store = st.session_state.bot.chunk_store
-    sources = {}
-    for doc_id in store:
-        # doc_id format: sourcename_chunk_N
-        parts = doc_id.rsplit("_chunk_", 1)
-        src = parts[0] if len(parts) == 2 else doc_id
-        sources[src] = sources.get(src, 0) + 1
-    return [{"Document": src, "Chunks": cnt, "Type": "—"} for src, cnt in sorted(sources.items())]
+    docs = st.session_state.bot.loaded_documents
+    return [{"Document": name, "Chunks": cnt, "Type": "—"} for name, cnt in sorted(docs.items())]
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -118,7 +122,9 @@ with st.sidebar:
         if st.button("Connect", use_container_width=True, type="primary"):
             try:
                 RAGChatbot = get_bot_class()
-                bot = RAGChatbot(host=ip, port=int(port), top_k=5, min_score=0.55)
+                # top_k / min_score aren't passed — RAGChatbot falls back to
+                # PY_SCHEMA.DEFAULT_TOP_K / PY_SCHEMA.DEFAULT_MIN_SCORE itself.
+                bot = RAGChatbot(host=ip, port=int(port))
                 bot.connect()
                 st.session_state.bot       = bot
                 st.session_state.connected = True
@@ -163,7 +169,7 @@ with st.sidebar:
     # ── live stats ──
     st.subheader("Live Stats")
     s = get_stats()
-    st.metric("Chunks in DB",     chunk_count())
+    st.metric("Chunks loaded (session)", chunk_count())
     st.metric("Queries answered", s["total_queries"])
     st.metric("Avg latency (ms)", f"{avg_latency_ms():.0f}")
     st.metric("No-context replies", s["no_context_count"])
@@ -183,9 +189,16 @@ with tab_chat:
 
     if not st.session_state.connected:
         st.info("Connect to server using the sidebar to get started.")
-    elif chunk_count() == 0:
-        st.warning("No chunks loaded. Click 'Load KB from folder' in the sidebar.")
     else:
+        # v2 note: unlike v1, there's no way to confirm the engine already
+        # holds data from a previous session (no live-count command, no
+        # local cache) — so this is a hint, not a hard gate. Chat still
+        # works against an already-populated DB even if the session-local
+        # counter reads 0.
+        if chunk_count() == 0:
+            st.info("No chunks loaded this session yet. Use 'Load KB from folder' in the "
+                    "sidebar if this is a fresh database — otherwise the existing DB is fine to query.")
+
         # ── clear history button ──
         if st.button("🗑 Clear History", key="clear_chat"):
             st.session_state.chat_history = []
@@ -268,6 +281,8 @@ with tab_search:
                 try:
                     from pipeline.embedder import embed
                     vector  = embed(query)
+                    # v2: results are (doc_id, score, text) — text comes straight
+                    # from the engine now, no local chunk_store lookup needed.
                     results = st.session_state.bot.client.query(
                         vector, k=top_k, filters=filters
                     )
@@ -279,11 +294,7 @@ with tab_search:
                 st.warning("No results found.")
             else:
                 st.success(f"Found {len(results)} result(s)")
-                for rank, (doc_id, score) in enumerate(results, 1):
-                    chunk_preview = st.session_state.bot.chunk_store.get(doc_id, "")
-                    # preview       = chunk_preview[:200] + "..." if len(chunk_preview) > 200 else chunk_preview
-                    preview = chunk_preview
-
+                for rank, (doc_id, score, text) in enumerate(results, 1):
                     with st.container(border=True):
                         c1, c2 = st.columns([3, 1])
                         with c1:
@@ -293,12 +304,11 @@ with tab_search:
 
                         safe_score = max(0.0, min(float(score), 1.0))
                         st.progress(safe_score, text=f"Similarity: {score:.1%}")
-                        # st.progress(min(float(score), 1.0),text=f"Similarity: {score:.1%}")
 
-                        if preview:
-                            st.caption(preview)
+                        if text:
+                            st.caption(text)
                         else:
-                            st.caption("_(chunk text not available locally)_")
+                            st.caption("_(empty text payload)_")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -311,24 +321,26 @@ with tab_kb:
         st.info("Connect to the server first.")
     else:
         # ── document table ──
-        st.subheader("Loaded Documents")
+        st.subheader("Loaded Documents (this session)")
         summary = kb_summary()
 
         if not summary:
-            st.warning("No documents loaded yet. Use the sidebar or upload below.")
+            st.warning("No documents loaded this session yet. Use the sidebar or upload below — "
+                       "note this list won't show documents already in the DB from a prior session.")
         else:
-            # add file type column from extension inference
+            # filenames now keep their real extension (loaded_documents is keyed
+            # by the actual source filename), so this detection is reliable —
+            # v1 inferred this from a doc_id that had already dropped the extension.
             for row in summary:
                 name = row["Document"]
-                if name.endswith((".txt",)):
+                if name.lower().endswith(".txt"):
                     row["Type"] = "📄 TXT"
-                elif name.endswith((".pdf",)):
+                elif name.lower().endswith(".pdf"):
                     row["Type"] = "📕 PDF"
-                elif name.endswith((".docx",)):
+                elif name.lower().endswith(".docx"):
                     row["Type"] = "📘 DOCX"
                 else:
-                    row["Type"] = "📄 TXT"   # default — source names have no ext
-            # st.dataframe(summary, use_container_width=True, hide_index=True)
+                    row["Type"] = "❓"
             st.dataframe(summary, width="stretch", hide_index=True)
             st.caption(f"Total: {chunk_count()} chunks across {len(summary)} document(s)")
 
@@ -356,7 +368,9 @@ with tab_kb:
 
                 with st.spinner(f"Chunking, embedding, and inserting '{uploaded.name}'..."):
                     try:
-                        st.session_state.bot.add_document(tmp_path, chunk_size=150, display_name=uploaded.name)
+                        # chunk_size omitted — add_document() falls back to
+                        # PY_SCHEMA.DEFAULT_CHUNK_SIZE itself.
+                        st.session_state.bot.add_document(tmp_path, display_name=uploaded.name)
                         st.success(f"'{uploaded.name}' ingested successfully!")
                     except Exception as e:
                         st.error(f"Ingestion error: {e}")
@@ -374,7 +388,7 @@ with tab_kb:
         c1.metric("Total Queries",      s["total_queries"])
         c2.metric("Avg Latency (ms)",   f"{avg_latency_ms():.0f}")
         c3.metric("No-context Replies", s["no_context_count"])
-        c4.metric("Chunks in DB",       chunk_count())
+        c4.metric("Chunks loaded (session)", chunk_count())
 
         if s["total_queries"] > 0:
             answered = s["total_queries"] - s["no_context_count"]

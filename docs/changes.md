@@ -1,10 +1,27 @@
 ### Latest:
 
+
+1. TODO: Update the knowledge base path from ingerster.py
+2. TODO: How will the clients know on a boot up, which files have already been ingested ? Will need to create a new file, to store the files, which have been ingested and stored in the database, python-side will handle this, engine will not. 
+3. TODO: Once a client is disconnected or chat is cleared the chunks_ingested etc stats also are erased. 
+4. TODO: 7. NOTE: Updated .env, so .env.example has to be updated later on as well, just a reminder. 
+5. TODO: 
+
+### 4. 
+ENGINE:
+1. Updated paths in engine/schema.hpp
+2. Updated temp parth in file_manager.cpp, in compact()
+3. Updated paths in file_manager_tests.cpp
+4. Somehow a bug got in the files " long find_by_id(const std::string &id);", return type mismatch, now fixed that as well.
+5. Updated CMAKELISTS.txt
+6. Built each executable, and ran all tests, each tests passed without any failures.
+7. NOTE: Updated .env, so .env.example has to be updated later on as well, just a reminder. 
+8. Ran the full application, and everything works without error, and gives expected results. 
+
+### 3. 
 1. Updated searcher.py, embedder.py, 
 2. Creaed a schema file for the python backend. 
 3. Moved all constants source to that file. 
-4. 
-
 
 ###  2
 1. Created schema_loader.py, which uses regular expression to search the schema.hpp, to isolate the namespace schema, and derive the constexptrs from it. NOTE: Single Source Of Truth, Rule maintained.

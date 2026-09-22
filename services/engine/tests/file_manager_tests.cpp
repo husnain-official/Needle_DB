@@ -16,14 +16,14 @@ protected:
     std::string entry_path_;
     std::string text_path_;
     std::string index_path_;
-    const std::string temp_compact_entry_ = "./data/temp_database.vdb";
-    const std::string temp_compact_text_ = "./data/temp_text_database.vdb";
+    const std::string temp_compact_entry_ = "./temp_database.vdb";
+    const std::string temp_compact_text_ = "./temp_text_database.vdb";
 
     void SetUp() override
     {
         // Ensure the hardcoded data directory used by compact() exists
         std::error_code ec;
-        std::filesystem::create_directories("./data", ec);
+        // std::filesystem::create_directories("./data", ec);
 
         const ::testing::TestInfo *test_info = ::testing::UnitTest::GetInstance()->current_test_info();
         std::string test_name = test_info->name();

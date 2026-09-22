@@ -64,7 +64,7 @@ public:
      * @return Zero-based sequential target record number, or negative one if unfound.
      * @warning Executes an unoptimized linear O(N) scan across the binary file.
      */
-    int64_t find_by_id(const std::string &id);
+    long find_by_id(const std::string &id);
 
     /**
      * @brief Rewrites the persistent entry and text database files to purge all soft-deleted records.
