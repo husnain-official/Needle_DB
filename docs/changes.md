@@ -155,3 +155,5 @@ i need to rember even if they only teach us ASCII the world has moved on from th
 8. Ran the app and tested it. 
 
 ### 9/30/26 (2st commit):
+1. Updated 1200 max text lenght in engine.md
+2. 

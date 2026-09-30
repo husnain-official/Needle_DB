@@ -14,7 +14,7 @@ The following table centralizes all schema limits and tuning factors defined in 
 | `ID_LENGTH` | 32 | Maximum byte length for a vector's unique string ID. |
 | `META_DATA_LENGTH` | 32 | Maximum byte length per metadata key or value. |
 | `META_DATA_KP_PAIRS` | 3 | Maximum metadata key-value pairs per record. |
-| `TEXT_MAX_LENGTH` | 999 | Maximum byte length for an inserted text payload. |
+| `TEXT_MAX_LENGTH` | 1200 | Maximum byte length for an inserted text payload. |
 | `VERSION` | 6 | Binary schema version identifier. |
 | `MAX_K_SIMILAR` | 30 | Hard upper limit for candidate match count (`top_k`). |
 | `MAX_CENTROIDS` | 100 | Target number of k-means clusters for the IVF index. |
@@ -66,7 +66,7 @@ Immediately following the 32-byte header are the sequential `DB_entry` records.
 | `flag` | `uint8_t` | 1 byte | Tombstone flag: `1` for active, `0` for soft-deleted. |
 | `id` | `char[32]` | 32 bytes | Unique vector string identifier. |
 | `text_offset` | `uint64_t` | 8 bytes | Absolute byte offset in the text database file. |
-| `text_length` | `uint16_t` | 2 bytes | Byte length of the associated text payload (max 999). |
+| `text_length` | `uint16_t` | 2 bytes | Byte length of the associated text payload (max 1200). |
 | `meta_data` | `Metadata_entry[3]` | 192 bytes | Array of 3 structured key-value pairs. |
 | `meta_data_count` | `uint8_t` | 1 byte | Number of active key-value pairs (0 to 3). |
 | `embeddings` | `float[1024]` | 4096 bytes | Raw floating-point embedding sequence. |
@@ -111,7 +111,7 @@ NeedleDB communicates over a raw TCP socket using line-delimited text commands. 
 INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
 ```
 *   `text` is read exactly up to `text_length` bytes and can contain literal spaces.
-*   The text payload cannot exceed `TEXT_MAX_LENGTH` (999 bytes).
+*   The text payload cannot exceed `TEXT_MAX_LENGTH` (1200 bytes).
 *   Metadata pairs are optional (up to 3).
 *   Must provide exactly 1024 floats.
 *   The vector is $L_2$ normalized upon ingestion.

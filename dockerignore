@@ -1,0 +1,19 @@
+.git
+.gitignore
+docs
+LICENSE
+README.md
+
+# secrets / local config: compose mounts .env at runtime, never bake it in
+.env
+.env.*
+
+# local artifacts
+**/__pycache__
+**/*.pyc
+**/.venv
+**/build
+
+# runtime state must not be baked into images
+services/engine/data/*.vdb
+services/client/data/ingestion_ledger.json

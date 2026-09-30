@@ -1,7 +1,11 @@
+# Build context is the REPO ROOT (see docker-compose.yml).
 FROM python:3.11-slim
 
+# Mirror the repo layout inside the image and run from the repo root: schema_loader.py's default
+# path ("services/engine/include/schema.hpp") is relative to the working directory.
 WORKDIR /app
 
+# Consider pinning these in a requirements.txt so rebuilds stay reproducible.
 RUN pip install --no-cache-dir \
     streamlit \
     python-dotenv \
@@ -9,11 +13,8 @@ RUN pip install --no-cache-dir \
     python-docx \
     ollama
 
-COPY app/ ./app/
-COPY client/ ./client/
-COPY pipeline/ ./pipeline/
-COPY app_gui.py .
+COPY services/client/ /app/services/client/
+COPY services/engine/include/schema.hpp /app/services/engine/include/schema.hpp
 
-RUN mkdir -p data/documents
-
-CMD ["streamlit", "run", "app_gui.py", "--server.address=0.0.0.0"]
+EXPOSE 8501
+CMD ["streamlit", "run", "services/client/app_gui.py", "--server.address=0.0.0.0", "--server.headless=true"]
