@@ -22,11 +22,17 @@
 # `schema` SimpleNamespace — the same one passed to Client.connect() — and
 # every limit is read from it. This file is not the source of truth for any
 # of those numbers.
+#
+# Ledger: after each file finishes, status (successful/partial/failed) and
+# accepted/total chunk counts are written via pipeline.ledger so the GUI
+# can rehydrate across restarts. Same-name re-ingestion is blocked client-
+# side before any engine call.
 # =============================================================================
 
 import os
 import re
 from pipeline.embedder import embed
+from pipeline.ledger import is_already_ingested, record_ingestion
 from schema import PY_SCHEMA
 
 
@@ -202,6 +208,12 @@ def ingest_file(client, filepath: str, schema, chunk_size: int = PY_SCHEMA.DEFAU
         chunk_id = chunk index as a string e.g. "0", "1", "2"
         (protocol allows up to schema.META_DATA_KP_PAIRS pairs; we use 2)
 
+    Same-name re-ingestion is blocked client-side (successful/partial
+    ledger entries). Failed entries may be retried.
+
+    After the file finishes, status + accepted/total counts are written
+    to the JSON ledger.
+
     Args:
         client:     connected Client instance
         filepath:   path to a .txt, .pdf, or .docx file
@@ -224,23 +236,32 @@ def ingest_file(client, filepath: str, schema, chunk_size: int = PY_SCHEMA.DEFAU
 
     print(f"\n[ingestor] '{filename}' (type: {ext})")
 
+    # ── Client-side duplicate guard ───────────────────────────────────
+    if is_already_ingested(filename):
+        print(f"  SKIP — '{filename}' already ingested (see ledger).")
+        return []
+
     # ── Step 1: extract text ──────────────────────────────────────────
     try:
         text = read_file(filepath)
     except ValueError as e:
         print(f"  SKIP — {e}")
+        record_ingestion(filename, "failed", 0, 0, error=str(e))
         return []
     except Exception as e:
         print(f"  ERROR reading file — {e}")
+        record_ingestion(filename, "failed", 0, 0, error=str(e))
         return []
 
     if not text.strip():
         print("  SKIP — file produced no extractable text (image-only PDF?)")
+        record_ingestion(filename, "failed", 0, 0, error="no extractable text")
         return []
 
     # ── Step 2: chunk ─────────────────────────────────────────────────
     chunks = chunk_text(text, chunk_size)
-    print(f"  {len(chunks)} chunk(s) of ~{chunk_size} words")
+    total_chunks = len(chunks)
+    print(f"  {total_chunks} chunk(s) of ~{chunk_size} words")
 
     # ── Step 3: embed + insert ────────────────────────────────────────
     inserted_ids = []
@@ -249,7 +270,7 @@ def ingest_file(client, filepath: str, schema, chunk_size: int = PY_SCHEMA.DEFAU
         chunk_bytes = len(chunk.encode("utf-8"))
         if chunk_bytes > schema.TEXT_MAX_LENGTH:
             print(
-                f"  [{i+1}/{len(chunks)}] SKIP — chunk is {chunk_bytes} bytes, "
+                f"  [{i+1}/{total_chunks}] SKIP — chunk is {chunk_bytes} bytes, "
                 f"exceeds engine limit of {schema.TEXT_MAX_LENGTH} bytes "
                 f"(try a smaller chunk_size)."
             )
@@ -261,22 +282,32 @@ def ingest_file(client, filepath: str, schema, chunk_size: int = PY_SCHEMA.DEFAU
             "chunk_id": str(i),                # e.g. "0"
         }
 
-        print(f"  [{i+1}/{len(chunks)}] Embedding '{doc_id}'...")
+        print(f"  [{i+1}/{total_chunks}] Embedding '{doc_id}'...")
         try:
             vector = embed(chunk)
         except Exception as e:
-            print(f"  [{i+1}/{len(chunks)}] ERROR embedding chunk — {e}")
+            print(f"  [{i+1}/{total_chunks}] ERROR embedding chunk — {e}")
             continue
 
         try:
             response = client.insert(doc_id, chunk, vector, metadata=metadata)
         except Exception as e:
-            print(f"  [{i+1}/{len(chunks)}] ERROR inserting chunk — {e}")
+            print(f"  [{i+1}/{total_chunks}] ERROR inserting chunk — {e}")
             continue
 
-        print(f"  [{i+1}/{len(chunks)}] Server → {response.strip()}")
+        print(f"  [{i+1}/{total_chunks}] Server → {response.strip()}")
         inserted_ids.append(doc_id)
 
+    accepted = len(inserted_ids)
+    if accepted == 0:
+        status = "failed"
+    elif accepted == total_chunks:
+        status = "successful"
+    else:
+        status = "partial"
+
+    record_ingestion(filename, status, total_chunks, accepted)
+    print(f"  Ledger → {status} ({accepted}/{total_chunks})")
     return inserted_ids
 
 
@@ -284,6 +315,8 @@ def ingest_folder(client, folder_path: str, schema, chunk_size: int = PY_SCHEMA.
     """
     Ingests all supported files (.txt, .pdf, .docx) found in a folder.
     Unsupported files are skipped with a warning.
+    Already-ingested filenames (successful/partial in the ledger) are
+    skipped by ingest_file() before any engine call.
 
     Args:
         client:      connected Client instance
@@ -328,6 +361,7 @@ def ingest_folder(client, folder_path: str, schema, chunk_size: int = PY_SCHEMA.
             all_ids[filename] = ingest_file(client, filepath, schema, chunk_size)
         except Exception as e:
             print(f"[ingestor] ERROR processing '{filename}' — {e}")
+            record_ingestion(filename, "failed", 0, 0, error=str(e))
             all_ids[filename] = []
 
     total = sum(len(v) for v in all_ids.values())

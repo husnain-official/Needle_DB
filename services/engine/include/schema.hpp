@@ -44,7 +44,7 @@ namespace schema
     /**
      * @brief Maximum byte length allowed for an inserted text payload.
      */
-    constexpr uint16_t TEXT_MAX_LENGTH = 999;
+    constexpr uint16_t TEXT_MAX_LENGTH = 1200;
 
     /**
      * @brief Binary schema version identifier written to the persistent database header.

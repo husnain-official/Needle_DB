@@ -1,121 +1,3 @@
-### Latest:
-
-
-1. TODO: Update the knowledge base path from ingerster.py
-2. TODO: How will the clients know on a boot up, which files have already been ingested ? Will need to create a new file, to store the files, which have been ingested and stored in the database, python-side will handle this, engine will not. 
-3. TODO: Once a client is disconnected or chat is cleared the chunks_ingested etc stats also are erased. 
-4. TODO: 7. NOTE: Updated .env, so .env.example has to be updated later on as well, just a reminder. 
-5. TODO: 
-
-### 4. 
-ENGINE:
-1. Updated paths in engine/schema.hpp
-2. Updated temp parth in file_manager.cpp, in compact()
-3. Updated paths in file_manager_tests.cpp
-4. Somehow a bug got in the files " long find_by_id(const std::string &id);", return type mismatch, now fixed that as well.
-5. Updated CMAKELISTS.txt
-6. Built each executable, and ran all tests, each tests passed without any failures.
-7. NOTE: Updated .env, so .env.example has to be updated later on as well, just a reminder. 
-8. Ran the full application, and everything works without error, and gives expected results. 
-
-### 3. 
-1. Updated searcher.py, embedder.py, 
-2. Creaed a schema file for the python backend. 
-3. Moved all constants source to that file. 
-
-###  2
-1. Created schema_loader.py, which uses regular expression to search the schema.hpp, to isolate the namespace schema, and derive the constexptrs from it. NOTE: Single Source Of Truth, Rule maintained.
-NOTE: This forces a runtime read, whenever the system starts this file has to run, so the python module has the variables it needs.
-
-2. 
-NOTE: State properly that python side was written with 50/50 work me and AI, too burned out from this project to work fully on it anymore. 
-
-###  1
-
-1. Moved src, include, tests, dockerfile.cpp, cmakelists.txt into new structre of project, the inner links, in the files are to be updated at a later date.
-
-2. Protocol.md, still had old/stale data from v1, so removed data from it and deleted it, as engine.md speicifies everything internal about the engine not just the protocol, do
-
-### 11/9/26: 
-- i am starting the clean up of the code, i will read the code and also generate the doxy through Gemini pro extended 3.1
-
-- schema.hpp, read and doxy added.
-- env_config.hpp, read and doxy added.
-- types.hpp, read and doxy added.
-- command_parser.h\cpp, read and doxy added.
-- file_manager.h\cpp, read and doxy added.
-- vector_server.h\cpp, read and doxy added.
-- vector_store.h\cpp, read and doxy added.
-
-- Confirmed all tests are being passed without any errors/bugs.
-
-
-- Generated engine.md, with all protocol info, commands, schema and all engine's internal knowledge.
-
-
-### TO-DO's FINAL FINAL: 
-```
-Currently the OPTIMIZE call is taking well over 15 - 30 minutes at 500k entries, and at the same time, the entire server has to be loked in a mutex, so ALL clients have to wait, so i will do the least effort solution for now, and leave and document the proper solution for v3, that is instead of k-mean for all k, do it for a fixed amount of randomly choosen. 
-```
-I understood the concept and left the implementation for the new ivf.build_() function to AI, due to me not wanting to do it. But i fully understood the concept and reviewed the code as well.
-
-### Spent last 2 days debugging an bug in the vector-server-test-file,
-in the process i ended up upgrading the build_ function to test again a sample of a fixed size. 
-well thats the last, change, now i will go through each code file, tidy things up, add/remove comments, and start writing/generating proper documentation, also will generate a log/notes file, i might or mightnot updoad that one, but it still needs to be generated. 
-- Deleiveralbes:
-1. README(not yet, after the python side has been completed then)
-2. ENGINE.md (protocols, commands, architectural decisions, all important things)
-3. Changes/Notes.md (Updated and merged into one)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### To-Do's, final things for v2 engine, hopefully done in 2 days.
-1. A new "OPTIMIZE" command, which rebuilds the centroids [DONE]
-2. A conditional in "DELETE" which automatically calls compact() [DONE]
-3. A suggesstion system, which will remind the client to call optimize after a condition has been met. [DONE]
-
-
-### Changes - 8/9/26
-- TODO-01
-1. Added 'optimize_parsing' to command_parser.h/.cpp
-2. Added a new 'OPTIMIZE' block in handle_client() in vector_server.cpp
-
-- TODO-03
-1. Added 2 more functios in file_manager(), they read and write the number at which the last build() was called. 
-2. Updated 2 functions, which read and write the centroids embeddings. 
-3. This changed the schema of the file a bit, document it later properly. 
-4. Added a new member in server to store at which entry the last build_ was made, for reminding users.
-5. Document it clearly, it is recommended that you optimize if the entries become twice of where the last build was made at.
-                    results.message = "INSERT <Successful>, WARNING<OPTIMIZE needed for better searches.>\n";
-sent if conditions are met.
-
-- TODO-02
-1. added a new func in file-manager to see if compact calling condition is met or not. 
-2. Updated the send message of "DELETE" if compact was called. 
-delete might now return such messages as well
-                            error_message = "DELETE <Successful>, WARNING <Database compaction failed>.\n";
-                    results.message = "DELETE <Successful>, Compaction<Successful>\n";
- etc not just DELETE<Successful>
-
-### NOTES are just my thoughts not what i have implemented yet.
-NOTE:1  |   Current implementation of TODO-01 has many problems from a system view, it stops all clients while its running and if this were even thought of for any production code, well i dont really have an analogy, its just bad.
-
-NOTE:2  |   
-
-
 > **Note on AI Generation:** All of the following text is written by AI to maintain a compact and detailed format. If you want to read the original, non-AI wording and follow the author's exact thought process, please revert to the commit made on 23/8/26.
 
 ### SSOT for Schema (Header & Entry)
@@ -204,3 +86,72 @@ NOTE:2  |
 made it such, if the index files size is 0, the server will recreate the indexes, and save them.
 6. 
 Updated vector_server tests, file_manager tests
+
+> **Note on AI Generation:** All of the following text is written by AI to maintain a compact and detailed format. If you want to read the original, non-AI wording and follow the author's exact thought process, please revert to the commit made on 22/9/26.
+
+### New Commands & Mechanics (8/9/26)
+* **New `OPTIMIZE` Command:** Added parsing logic to `command_parser.h/.cpp` and an execution handling block in `vector_server.cpp`.
+* **Auto-Compaction:** Updated the `DELETE` command to conditionally trigger `compact()`. Return messages are now dynamic based on compaction success (e.g., `DELETE <Successful>, Compaction<Successful>\n` or `WARNING <Database compaction failed>.\n`).
+* **Optimization Suggestion System:** The server now tracks the entry count at the time of the last `build_` execution. 
+* Implemented two new functions in `file_manager` to read and write this centroid build state, slightly modifying the database file schema.
+* **Dynamic Client Warnings:** If current database entries double the amount recorded at the last optimization, the server appends a warning to client responses (e.g., `INSERT <Successful>, WARNING<OPTIMIZE better for needed searches.>\n`).
+* **Known Architecture Flaw:** The current `OPTIMIZE` execution locks all connected clients behind a mutex until completion. Documented as a critical system flaw to be resolved in v3.
+
+### Server Optimization & IVF Rebuild
+> **Note on AI Generation:** The conceptual logic for the fixed-size sampling was understood and reviewed manually, but the code implementation for `ivf.build_()` was generated by AI.
+* Debugged and resolved a persistent bug in the vector-server test suite.
+* Upgraded the `build_` function to compute centroids against a fixed-size sample of vectors rather than the entire dataset, drastically improving optimization times.
+
+### Code Cleanup & Doxygen
+> **Note on AI Generation:** Doxygen comments for the cleaned files were generated using AI.
+* Completed code review, cleanup, and Doxygen documentation generation for the following core files: `schema.hpp`, `env_config.hpp`, `types.hpp`, `command_parser.h/.cpp`, `file_manager.h/.cpp`, `vector_server.h/.cpp`, and `vector_store.h/.cpp`.
+* Verified zero regressions post-cleanup via the test suite.
+
+### Project Restructuring & Documentation
+* Relocated `src`, `include`, `tests`, `Dockerfile`, and `CMakeLists.txt` into a new structured project directory (internal path links to be updated accordingly).
+* Deleted the obsolete `Protocol.md` (which contained stale v1 data).
+* Generated a comprehensive `ENGINE.md` that consolidates all protocol info, commands, schemas, and internal architectural decisions.
+* Identified final deliverables for v2: `README.md` (pending Python completion), `ENGINE.md`, and a consolidated `Changes/Notes.md`.
+
+### Engine Updates & Bug Fixes
+* Updated directory paths across `engine/schema.hpp`, `file_manager.cpp` (specifically the temporary path in `compact()`), and `file_manager_tests.cpp`.
+* Fixed a return type mismatch bug in the `find_by_id(const std::string &id)` function signature.
+* Updated `CMakeLists.txt` to reflect the new file structure.
+* Verified engine stability: Built all executables and successfully passed all integrated test suites.
+
+> ----------------------------------------------------------------------------------------------------------------------
+### Python Backend & SSOT
+> **Note on AI Generation:** The Python backend development was split 50/50 with AI.
+* Created a dedicated schema file for the Python backend and centralized all constant sources into it.
+* Updated `searcher.py` and `embedder.py` to integrate the new configuration.
+* Implemented `schema_loader.py` to maintain the Single Source of Truth (SSOT). It uses regular expressions to parse `schema.hpp`, isolate the `schema` namespace, and dynamically extract `constexpr` values.
+* **Note:** This implementation forces a runtime read on system startup to supply the Python module with necessary engine variables.
+
+### To-Dos & Future Iterations
+* Update the knowledge base path in `ingerster.py`.
+* Implement a Python-side tracking file to persist which files have been ingested upon system boot (the engine will not manage this state).
+* Fix state persistence: currently, ingested chunk statistics are erased when a client disconnects or the chat is cleared.
+* Update `.env.example` to reflect recent path and port changes made to `.env`.
+* Add a troubleshooting section in `README.md` detailing steps for missing or failing Linux TCP server files.
+*
+
+* For now, the file in whcich the files which have been ingested will be saved will just be a simple txt file, or a csv file, later on in future IF EVER i find some time, alot of fun things can be done by switching to csv format, how many chunks each file is, how many top results were from this file, etc etc. 
+
+### V3: 
+- A Command like STATS, to which the engine returns all the stats of what it has, how many entries it has stored et. 
+- Note: How can we delete a whole file from the engine ? currently we can not, but in the futute how ? simple we need to store which entry # the file started from and from where it lasted/how many entires/chunks was it. So, later on we can make a new command DELETE_FILE FILE_NAME, this will take the file name, pyton side will use it to get the entry # from where it started and where i ended, and send those numbers to the engine, the engine will recreate the database and delete all entires between those numbers. or just soft delete them, but this can be done very easily, i did not think of this at all till now, but a very good thing for v3. 
+- 
+
+### 9/30/26 (1st commit):
+1. Now files saved are stored and also their additional info, fully/partial/failed ingestion of the file, number of chunks etc. 
+2. The stats are also saved. 
+3. Made a new file in client/pipeline/ledger.py which generates a new file in the client/data folder and saves data there. 
+4. Client side data is all to be stored in clinet/data, also the knowledge base is now client/data/knowledge_base/
+5. Updated: Ingestor.py, rag_chatbot.py, app_gui.py.
+6. Delted the services/engine/data/documents folder and replaced it with the new knowledgebase folder in above point mentioned. 
+7. NOTE: Idiot :), the chunk-words = 150 and max-text-length = 999 have no relation in the code, but they are 2 things conditioning the same text, if a 150 word chunk is passed to engine it will reject it, why ? because my intelligent brain decided there was no relation between these 2 variables, so right now i am only doing a patch up and ramping up the max-text-length to like 1200 to accomodate the text and a few multiple byte chars as well, but this is not a fix, this is only just a patch in real terms.
+150 chars = 1090 bytes, but i am setting it to 1200, to also allow multi bytes characters.
+i need to rember even if they only teach us ASCII the world has moved on from that decades ago, new standards are used now a days, just something to keep in mind for next time.
+8. Ran the app and tested it. 
+
+### 9/30/26 (2st commit):

@@ -32,7 +32,7 @@ def get_bot_class():
 DEFAULT_IP   = os.getenv("IP") or ""
 _env_port    = os.getenv("PORT")
 DEFAULT_PORT = int(_env_port) if _env_port else 8080
-KB_FOLDER    = os.getenv("DOC_PATH")
+# KB_FOLDER    = os.getenv("DOC_PATH")
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -72,10 +72,9 @@ def avg_latency_ms():
 
 def chunk_count():
     """
-    Chunks loaded THIS session — v2 has no local text cache and the wire
-    protocol has no command that returns the engine's live vector count
-    (see engine.md), so this can under-report on a DB that already had
-    data before you connected. It's a display convenience, not ground truth.
+    Chunks known to the client-side ledger. Rehydrated on connect() so this
+    does not reset to 0 after a restart. Still a client-side estimate, not
+    a live engine count (no LIST/COUNT command on the wire).
     """
     if st.session_state.bot is None:
         return 0
@@ -84,14 +83,31 @@ def chunk_count():
 
 def kb_summary():
     """
-    Returns a list of dicts: {filename, chunks, filetype}
-    derived from bot.loaded_documents (filename → chunk count).
-    Same session-only caveat as chunk_count().
+    Returns a list of dicts from the ledger: Document, Status, Accepted,
+    Total, Type. Falls back to empty list if bot is not connected.
     """
     if st.session_state.bot is None:
         return []
-    docs = st.session_state.bot.loaded_documents
-    return [{"Document": name, "Chunks": cnt, "Type": "—"} for name, cnt in sorted(docs.items())]
+    try:
+        rows = st.session_state.bot.get_kb_summary()
+    except Exception:
+        # Fallback for older bot instances without get_kb_summary
+        docs = st.session_state.bot.loaded_documents
+        rows = [
+            {"Document": name, "Status": "—", "Accepted": cnt, "Total": cnt, "Chunks": cnt}
+            for name, cnt in sorted(docs.items())
+        ]
+    for row in rows:
+        name = row["Document"]
+        if name.lower().endswith(".txt"):
+            row["Type"] = "📄 TXT"
+        elif name.lower().endswith(".pdf"):
+            row["Type"] = "📕 PDF"
+        elif name.lower().endswith(".docx"):
+            row["Type"] = "📘 DOCX"
+        else:
+            row["Type"] = "❓"
+    return rows
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -153,13 +169,14 @@ with st.sidebar:
 
     # ── KB loader ──
     st.subheader("Knowledge Base")
+    from schema import PY_SCHEMA
     if st.button("Load KB from folder", use_container_width=True,
                  disabled=not st.session_state.connected):
-        with st.spinner(f"Loading from '{KB_FOLDER}'..."):
+        with st.spinner(f"Loading from '{PY_SCHEMA.KB_FOLDER}'..."):
             try:
-                st.session_state.bot.load_knowledge_base(KB_FOLDER)
+                st.session_state.bot.load_knowledge_base(PY_SCHEMA.KB_FOLDER)
                 st.session_state.kb_loaded = True
-                st.success(f"{chunk_count()} chunks loaded")
+                st.success(f"{chunk_count()} chunks in ledger")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -169,7 +186,7 @@ with st.sidebar:
     # ── live stats ──
     st.subheader("Live Stats")
     s = get_stats()
-    st.metric("Chunks loaded (session)", chunk_count())
+    st.metric("Chunks loaded (ledger)", chunk_count())
     st.metric("Queries answered", s["total_queries"])
     st.metric("Avg latency (ms)", f"{avg_latency_ms():.0f}")
     st.metric("No-context replies", s["no_context_count"])
@@ -190,14 +207,11 @@ with tab_chat:
     if not st.session_state.connected:
         st.info("Connect to server using the sidebar to get started.")
     else:
-        # v2 note: unlike v1, there's no way to confirm the engine already
-        # holds data from a previous session (no live-count command, no
-        # local cache) — so this is a hint, not a hard gate. Chat still
-        # works against an already-populated DB even if the session-local
-        # counter reads 0.
+        # Ledger is rehydrated on connect, so a non-zero count means we have
+        # prior successful ingestions even if nothing was loaded this session.
         if chunk_count() == 0:
-            st.info("No chunks loaded this session yet. Use 'Load KB from folder' in the "
-                    "sidebar if this is a fresh database — otherwise the existing DB is fine to query.")
+            st.info("No chunks in the client ledger yet. Use 'Load KB from folder' in the "
+                    "sidebar or upload a document — otherwise the existing DB is fine to query.")
 
         # ── clear history button ──
         if st.button("🗑 Clear History", key="clear_chat"):
@@ -321,28 +335,26 @@ with tab_kb:
         st.info("Connect to the server first.")
     else:
         # ── document table ──
-        st.subheader("Loaded Documents (this session)")
+        st.subheader("Loaded Documents (client ledger)")
         summary = kb_summary()
 
         if not summary:
-            st.warning("No documents loaded this session yet. Use the sidebar or upload below — "
-                       "note this list won't show documents already in the DB from a prior session.")
+            st.warning("No documents in the client ledger yet. Use the sidebar or upload below.")
         else:
-            # filenames now keep their real extension (loaded_documents is keyed
-            # by the actual source filename), so this detection is reliable —
-            # v1 inferred this from a doc_id that had already dropped the extension.
-            for row in summary:
-                name = row["Document"]
-                if name.lower().endswith(".txt"):
-                    row["Type"] = "📄 TXT"
-                elif name.lower().endswith(".pdf"):
-                    row["Type"] = "📕 PDF"
-                elif name.lower().endswith(".docx"):
-                    row["Type"] = "📘 DOCX"
-                else:
-                    row["Type"] = "❓"
-            st.dataframe(summary, width="stretch", hide_index=True)
-            st.caption(f"Total: {chunk_count()} chunks across {len(summary)} document(s)")
+            display_rows = [
+                {
+                    "Document": r["Document"],
+                    "Status": r.get("Status", "—"),
+                    "Accepted / Total": f"{r.get('Accepted', 0)} / {r.get('Total', 0)}",
+                    "Type": r.get("Type", "❓"),
+                }
+                for r in summary
+            ]
+            st.dataframe(display_rows, width="stretch", hide_index=True)
+            st.caption(
+                f"Total: {chunk_count()} accepted chunks across {len(summary)} document(s) "
+                "(client-side ledger; may lag if another client wrote to the engine)"
+            )
 
         st.divider()
 
@@ -351,7 +363,8 @@ with tab_kb:
         uploaded = st.file_uploader(
             "Upload a .txt, .pdf, or .docx file",
             type=["txt", "pdf", "docx"],
-            help="File will be chunked, embedded, and inserted into the Needle_DB."
+            help="File will be chunked, embedded, and inserted into the Needle_DB. "
+                 "A filename already present in the ledger (successful/partial) is rejected."
         )
 
         if uploaded:
@@ -371,7 +384,7 @@ with tab_kb:
                         # chunk_size omitted — add_document() falls back to
                         # PY_SCHEMA.DEFAULT_CHUNK_SIZE itself.
                         st.session_state.bot.add_document(tmp_path, display_name=uploaded.name)
-                        st.success(f"'{uploaded.name}' ingested successfully!")
+                        st.success(f"'{uploaded.name}' finished (see Status column).")
                     except Exception as e:
                         st.error(f"Ingestion error: {e}")
                     finally:
@@ -388,7 +401,7 @@ with tab_kb:
         c1.metric("Total Queries",      s["total_queries"])
         c2.metric("Avg Latency (ms)",   f"{avg_latency_ms():.0f}")
         c3.metric("No-context Replies", s["no_context_count"])
-        c4.metric("Chunks loaded (session)", chunk_count())
+        c4.metric("Chunks (ledger)",    chunk_count())
 
         if s["total_queries"] > 0:
             answered = s["total_queries"] - s["no_context_count"]

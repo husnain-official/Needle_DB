@@ -24,6 +24,12 @@ from pipeline.ingestor import (
     _truncate_utf8,
     _build_doc_id,
 )
+from pipeline.ledger import (
+    load_ledger,
+    record_ingestion,
+    is_already_ingested,
+    get_document_summary,
+)
 from schema import PY_SCHEMA
 from schema_loader import load_cpp_schema
 
@@ -76,12 +82,9 @@ class RAGChatbot:
         # by Client.connect()/insert()/query() for all wire-format validation.
         self.engine_schema = None
 
-        # Lightweight per-document chunk counts (filename → chunk count) for
-        # UIs that want a "loaded documents" table — NOT the chunk text
-        # itself (v2 doesn't cache that; QUERY already returns it). Like
-        # everything else here, this is session-scoped: nothing is persisted
-        # to disk, so it resets on every connect() and won't reflect data
-        # already in the engine from a prior session until reloaded.
+        # Lightweight per-document info for UIs. Rehydrated from the JSON
+        # ledger on connect() so counts survive process restarts.
+        # Keyed by filename → accepted chunk count (backward compatible).
         self.loaded_documents: dict[str, int] = {}
 
         # conversation history for multi-turn Q&A
@@ -90,6 +93,7 @@ class RAGChatbot:
         # ── ADDITION 1: query stats for demo display ──────────────────
         # Tracks latency and retrieval counts so we can show performance
         # during the demo without running a separate benchmark.
+        # kb_chunks_loaded is also rehydrated from the ledger on connect().
         self.stats = {
             "total_queries":     0,
             "total_latency_ms":  0.0,
@@ -102,10 +106,25 @@ class RAGChatbot:
     # ─────────────────────────────────────────────────────────────────
 
     def connect(self):
-        """Load the engine's schema and connect to the C++ engine."""
+        """Load the engine's schema, connect to the C++ engine, and
+        rehydrate document / chunk counts from the client-side ledger."""
         self.engine_schema = load_cpp_schema()
         self.client.connect(self.host, self.port, self.engine_schema)
+        self._rehydrate_from_ledger()
         print(f"RAGChatbot connected to {self.host}:{self.port}")
+
+    def _rehydrate_from_ledger(self):
+        """Populate loaded_documents and stats from the JSON ledger so the
+        GUI does not show zeros after a restart."""
+        ledger = load_ledger()
+        self.loaded_documents = {}
+        for name, info in ledger.get("documents", {}).items():
+            accepted = int(info.get("accepted_chunks", 0) or 0)
+            if accepted > 0:
+                self.loaded_documents[name] = accepted
+        self.stats["kb_chunks_loaded"] = int(
+            ledger.get("stats", {}).get("kb_chunks_loaded", 0) or 0
+        )
 
     def disconnect(self):
         """Flush the engine's active header to disk and close the connection."""
@@ -127,7 +146,9 @@ class RAGChatbot:
         self.engine_schema before sending it to the engine — text no longer
         needs to be cached locally, since v2 QUERY results already include it.
 
-        Safe to call more than once — additional docs are added each time.
+        Already-ingested filenames are skipped by the ledger guard inside
+        ingest_file(). Safe to call more than once — additional new docs
+        are added; duplicates are ignored.
 
         Args:
             folder_path: path to folder containing knowledge base files
@@ -138,11 +159,12 @@ class RAGChatbot:
         size = chunk_size if chunk_size is not None else PY_SCHEMA.DEFAULT_CHUNK_SIZE
         results = ingest_folder(self.client, folder_path, self.engine_schema, size)
 
+        # Rehydrate so in-memory state matches the ledger (ingest_file already
+        # wrote per-file status; this picks up the fresh aggregate).
+        self._rehydrate_from_ledger()
+
         total_chunks = sum(len(ids) for ids in results.values())
-        self.stats["kb_chunks_loaded"] += total_chunks
-        for filename, ids in results.items():
-            if ids:
-                self.loaded_documents[filename] = self.loaded_documents.get(filename, 0) + len(ids)
+        print(f"Session added {total_chunks} new chunk(s).")
 
     # ─────────────────────────────────────────────────────────────────
     # INTERNAL HELPERS
@@ -304,6 +326,9 @@ class RAGChatbot:
         one addition ingest_file() doesn't support: an optional display_name
         to label the source as something other than the file's real name.
 
+        Same-name re-ingestion is blocked client-side via the ledger.
+        Status + accepted/total counts are written to the ledger on finish.
+
         Example:
             bot.add_document("data/new_paper.pdf")
         """
@@ -312,25 +337,33 @@ class RAGChatbot:
         source_for_metadata = _truncate_utf8(base_name, self.engine_schema.META_DATA_LENGTH)
         size = chunk_size if chunk_size is not None else PY_SCHEMA.DEFAULT_CHUNK_SIZE
 
+        # ── Client-side duplicate guard ───────────────────────────────
+        if is_already_ingested(filename):
+            print(f"SKIP: '{filename}' already ingested (see ledger).")
+            return
+
         try:
             text = read_file(filepath)
         except Exception as e:
             print(f"ERROR reading '{filepath}': {e}")
+            record_ingestion(filename, "failed", 0, 0, error=str(e))
             return
 
         if not text.strip():
             print(f"SKIP: no extractable text in '{filepath}'.")
+            record_ingestion(filename, "failed", 0, 0, error="no extractable text")
             return
 
         chunks = chunk_text(text, size)
-        print(f"Adding '{filename}' → {len(chunks)} chunk(s)")
+        total_chunks = len(chunks)
+        print(f"Adding '{filename}' → {total_chunks} chunk(s)")
 
         inserted = 0
         for i, chunk in enumerate(chunks):
             chunk_bytes = len(chunk.encode("utf-8"))
             if chunk_bytes > self.engine_schema.TEXT_MAX_LENGTH:
                 print(
-                    f"  [{i+1}/{len(chunks)}] SKIP — chunk is {chunk_bytes} bytes, "
+                    f"  [{i+1}/{total_chunks}] SKIP — chunk is {chunk_bytes} bytes, "
                     f"exceeds engine limit of {self.engine_schema.TEXT_MAX_LENGTH} bytes."
                 )
                 continue
@@ -342,13 +375,23 @@ class RAGChatbot:
                 vector   = embed(chunk)
                 response = self.client.insert(doc_id, chunk, vector, metadata=metadata)
             except Exception as e:
-                print(f"  [{i+1}/{len(chunks)}] ERROR inserting '{doc_id}': {e}")
+                print(f"  [{i+1}/{total_chunks}] ERROR inserting '{doc_id}': {e}")
                 continue
 
-            print(f"  [{i+1}/{len(chunks)}] Server → {response.strip()}")
+            print(f"  [{i+1}/{total_chunks}] Server → {response.strip()}")
             inserted += 1
 
-        self.stats["kb_chunks_loaded"] += inserted
-        if inserted:
-            self.loaded_documents[filename] = self.loaded_documents.get(filename, 0) + inserted
-        print(f"Done. {inserted}/{len(chunks)} chunk(s) added.")
+        if inserted == 0:
+            status = "failed"
+        elif inserted == total_chunks:
+            status = "successful"
+        else:
+            status = "partial"
+
+        record_ingestion(filename, status, total_chunks, inserted)
+        self._rehydrate_from_ledger()
+        print(f"Done. {inserted}/{total_chunks} chunk(s) added ({status}).")
+
+    def get_kb_summary(self) -> list[dict]:
+        """Rich document list from the ledger (status + accepted/total)."""
+        return get_document_summary()
