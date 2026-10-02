@@ -160,9 +160,15 @@ i need to rember even if they only teach us ASCII the world has moved on from th
 3. Ran docker build/compose to test it. 
 4. Added a requirements.txt for the client/
 
+### 10/2/26 (2nd commit):
+1. Updated the UI, now allows all commands to fully work.
+2. Added all new documentation files, and reviewed them. 
+3. Updated architecture image in assets
+4. 
 
-## Major Issue Noted: 
-1. There is no option in the UI for compact, delete_id, save, optimize, load, any of them, are not being used right now, or rather CAN NOT be used. [To be done now]
+### 10/2/25 (3rd commit):
+1. 
+
 
 ## Bugs Found: 
 1. Known issue: In chatbot mode, follow-up questions that rely on earlier messages may get a "no information" reply, because the similarity-threshold check runs before conversation history reaches the LLM. Rephrasing the question with full context works around it. This will be fixed in the next release.

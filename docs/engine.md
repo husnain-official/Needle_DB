@@ -1,12 +1,18 @@
 # NeedleDB v2 Engine Architecture & Internals
 
-This document is a technical reference for the NeedleDB v2 C++ storage engine. It details the on-disk binary schema, the TCP communication protocol, the persistence and concurrency models, and the internal workings of the Inverted File Index (IVF). 
+This document is a technical reference for the NeedleDB v2 C++ storage engine. It covers the on-disk binary schema, persistence model, concurrency implementation, Inverted File Index (IVF) behaviour, and auto-compaction.
 
-It is intended for developers contributing to the engine or building direct clients against the TCP protocol. For a high-level overview or usage instructions, see `README.md`.
+It is intended for developers working on the engine or diagnosing storage/index behaviour.  
+
+- **Wire protocol (commands, framing, responses):** see [`protocol.md`](./protocol.md)  
+- **Product overview and quick start:** see the root [`README.md`](../README.md)  
+- **Python middleware:** see [`middleware.md`](./middleware.md) 
+
+---
 
 ## Engine Schema Constants
 
-The following table centralizes all schema limits and tuning factors defined in `schema.hpp` that govern the engine's behavior:
+All structural limits and tuning factors live in `schema.hpp` as `constexpr` values. The server validates on-disk headers against these constants at startup and aborts on mismatch.
 
 | Constant | Value | Description |
 | :--- | :--- | :--- |
@@ -24,71 +30,72 @@ The following table centralizes all schema limits and tuning factors defined in 
 | `OPTIMIZE_REM_STARTS_AT` | 500 | Minimum active vector count before optimization warnings can trigger. |
 | `DELETE_FACTOR` | 8 | Multiplier applied to dead entry count to trigger auto-compaction. |
 
+Deployment-only settings (listen port, file paths) come from `.env` via `env_config.hpp` / `Config`. They do not change the binary record layout.
+
+---
+
 ## On-Disk Binary Schema
 
-NeedleDB stores data in a custom, fixed-size binary format designed for $O(1)$ offset access and strict portability. The schema is enforced at startup; any mismatch in dimensions, limits, or versioning will cause the server to abort.
+NeedleDB uses a fixed-size binary layout for $O(1)$ offset access and predictable portability. Layout is packed (`#pragma pack(push, 1)` on the header) so compilers cannot insert silent padding.
 
 ### Database Header (`DB_header`)
 
-The main database file begins with a strictly packed 32-byte header.
+The entry file begins with a 32-byte header.
 
 | Field | Type | Size | Description |
 | :--- | :--- | :--- | :--- |
 | `live_vector_count` | `uint64_t` | 8 bytes | Count of active (non-tombstoned) records. |
 | `total_vector_count` | `uint64_t` | 8 bytes | Total records appended, including soft-deleted ones. |
-| `magic_number` | `char[4]` | 4 bytes | Hardcoded signature `{'V', 'D', 'B', '\0'}`. |
-| `dimensions` | `uint16_t` | 2 bytes | Embedding dimension count (fixed to 1024). |
-| `version` | `uint8_t` | 1 byte | Schema version identifier (v6). |
-| `id_length` | `uint8_t` | 1 byte | Max ID length (fixed to 32). |
-| `kv_length` | `uint8_t` | 1 byte | Max length per metadata key/value (fixed to 32). |
-| `max_kv` | `uint8_t` | 1 byte | Max metadata pairs per record (fixed to 3). |
-| `padding` | `uint8_t[6]` | 6 bytes | Unused; pads the struct to exactly 32 bytes for alignment. |
-
-*Note: The header is aligned strictly to 1 byte (`#pragma pack(push, 1)`) to guarantee the 32-byte layout across different compilers and platforms without hidden padding.*
+| `magic_number` | `char[4]` | 4 bytes | Signature `{'V', 'D', 'B', '\0'}`. |
+| `dimensions` | `uint16_t` | 2 bytes | Must match `DIMENSIONS` (1024). |
+| `version` | `uint8_t` | 1 byte | Must match `VERSION` (6). |
+| `id_length` | `uint8_t` | 1 byte | Must match `ID_LENGTH` (32). |
+| `kv_length` | `uint8_t` | 1 byte | Must match `META_DATA_LENGTH` (32). |
+| `max_kv` | `uint8_t` | 1 byte | Must match `META_DATA_KP_PAIRS` (3). |
+| `padding` | `uint8_t[6]` | 6 bytes | Reserved; keeps the header at exactly 32 bytes. |
 
 ### Metadata Entry (`Metadata_entry`)
 
-Each record can hold up to 3 metadata pairs (key-value strings).
-
 | Field | Type | Size | Description |
 | :--- | :--- | :--- | :--- |
-| `key` | `char[32]` | 32 bytes | Fixed-size array for the metadata key. |
-| `value` | `char[32]` | 32 bytes | Fixed-size array for the metadata value. |
+| `key` | `char[32]` | 32 bytes | Fixed-size metadata key. |
+| `value` | `char[32]` | 32 bytes | Fixed-size metadata value. |
 
-*Note: Strings exactly 32 characters long will lack a null-terminator. The engine reads them safely via bounded bounds-checking (`strnlen`).*
+Strings that occupy all 32 bytes have no trailing `'\0'`. The engine reads them with bounded length checks (`strnlen`-style), not with unbounded C-string functions.
 
 ### Database Record (`DB_entry`)
 
-Immediately following the 32-byte header are the sequential `DB_entry` records.
+Contiguous records follow the header.
 
 | Field | Type | Size | Description |
 | :--- | :--- | :--- | :--- |
-| `flag` | `uint8_t` | 1 byte | Tombstone flag: `1` for active, `0` for soft-deleted. |
-| `id` | `char[32]` | 32 bytes | Unique vector string identifier. |
-| `text_offset` | `uint64_t` | 8 bytes | Absolute byte offset in the text database file. |
-| `text_length` | `uint16_t` | 2 bytes | Byte length of the associated text payload (max 1200). |
-| `meta_data` | `Metadata_entry[3]` | 192 bytes | Array of 3 structured key-value pairs. |
-| `meta_data_count` | `uint8_t` | 1 byte | Number of active key-value pairs (0 to 3). |
-| `embeddings` | `float[1024]` | 4096 bytes | Raw floating-point embedding sequence. |
+| `flag` | `uint8_t` | 1 byte | Tombstone: `1` active, `0` soft-deleted. |
+| `id` | `char[32]` | 32 bytes | Unique vector id. |
+| `text_offset` | `uint64_t` | 8 bytes | Byte offset into the text database file. |
+| `text_length` | `uint16_t` | 2 bytes | Payload length in bytes (≤ 1200). |
+| `meta_data` | `Metadata_entry[3]` | 192 bytes | Up to three key-value pairs. |
+| `meta_data_count` | `uint8_t` | 1 byte | Number of active pairs (0–3). |
+| `embeddings` | `float[1024]` | 4096 bytes | Embedding components. |
 
-*Size: The struct is exactly 4332 bytes per record.*
+**Record size:** 4332 bytes.  
+**Offset of record `i`:** `32 + (i × 4332)`.
+
+---
 
 ## Persistence Architecture
 
-NeedleDB isolates its persistent state across three dedicated files. If the entry and text files exist but mismatch, the server throws a corruption error. If the index file is missing, the server will silently recreate it.
+State is split across three files. Paths are taken from `.env` (`VECDB_ENTRY_DATA_PATH`, `VECDB_TEXT_DATA_PATH`, `VECDB_INDEX_DATA_PATH`).
 
-### 1. Entry Database (`database_entry.vdb`)
-Contains the 32-byte `DB_header` followed by contiguous `DB_entry` records. Lookups by logical index calculate physical offsets in $O(1)$ time: `offset = 32 + (index * 4332)`.
+| File | Role |
+| :--- | :--- |
+| Entry DB (`database_entry.vdb`) | Header + fixed-size `DB_entry` records. |
+| Text DB (`database_text.vdb`) | Append-only heap: 1-byte flag + variable-length text per payload. |
+| Index DB (`database_index.vdb`) | `last_build_at` (`uint64_t`) + flattened centroid coordinates. |
 
-### 2. Text Database (`database_text.vdb`)
-An append-only heap containing variable-length text payloads. Each payload is preceded by a 1-byte tombstone flag (`1` active, `0` deleted), written to the exact byte offset specified by `text_offset` in the corresponding `DB_entry`. The engine only reads from this file when text is explicitly required (e.g., when a vector is selected as a top-k match).
+**Consistency rules at startup**
 
-### 3. Index Database (`database_index.vdb`)
-Persists the pre-computed k-means centroids to eliminate expensive index rebuilds at boot.
-* **Layout**: Begins with an 8-byte `uint64_t` storing `last_build_at`. This represents the *live* vector count at the time the index was last built. *(Note: Do not conflate this with `DB_header.total_vector_count`, which counts all appended records including tombstones).* This is followed immediately by the flattened floating-point coordinates for all active centroids.
-* **Validation Flow**: The engine validates the index through two distinct gates at startup:
-  1. `is_index_populated()`: Checks if the index file is non-empty at all. If empty, it falls back to a from-scratch rebuild.
-  2. `centroids_to_copy == 0`: If the file has data, it calculates `(file_size - 8) / (1024 * 4)`. If the file is smaller than one full centroid (resulting in 0), it also falls back to a from-scratch rebuild.
+- If entry and text files disagree on existence (one present, one missing), the server treats the state as corrupt and errors out.
+- If the index file is missing or empty / too small to hold centroids, the server **rebuilds** the IVF index from the live entry set and writes a new index file. Primary entry/text data is not discarded solely because the index is absent.
 
 ```mermaid
 flowchart LR
@@ -101,65 +108,28 @@ flowchart LR
     F -- No --> G[set_ref_store + set_centroids + build_lists]
 ```
 
-## TCP Protocol Reference
+Text is read only when needed (for example, when a vector is returned as a top-k hit). Embeddings and metadata used for search stay in the entry file / RAM structures.
 
-NeedleDB communicates over a raw TCP socket using line-delimited text commands. The `Parser` class enforces exact space-delimited framing.
+---
 
-### `INSERT`
-**Request:**
-```
-INSERT <id> <text_length> <text> <dims> [key=val ...] f1 f2 ... fn
-```
-*   `text` is read exactly up to `text_length` bytes and can contain literal spaces.
-*   The text payload cannot exceed `TEXT_MAX_LENGTH` (1200 bytes).
-*   Metadata pairs are optional (up to 3).
-*   Must provide exactly 1024 floats.
-*   The vector is $L_2$ normalized upon ingestion.
+## TCP Interface (summary)
 
-**Responses:**
-*   Success: `INSERT <Successful>\n`
-*   Warning (threshold met): `INSERT <Successful>, WARNING<OPTIMIZE better for needed searches.>\n`
-*   Error: `ERROR <...>\n` (e.g., `ERROR <Id already exists in database>`, `ERROR <Vector Failed Normalization>`)
+The engine listens on a TCP port and speaks a line-delimited text protocol (`INSERT`, `QUERY`, `DELETE`, `SAVE`, `LOAD`, `OPTIMIZE`).
 
-### `QUERY`
-**Request:**
-```
-QUERY <top_k> <dims> [key=val ...] f1 f2 ... fn
-```
-*   `top_k` is clamped to a maximum of 30.
-*   Empty metadata values act as wildcards.
+**Full request/response grammar, limits, and client guidelines:** [`protocol.md`](./protocol.md).
 
-**Responses:**
-*   Success Header: `QUERY <top_k>\n`
-*   Result Lines (repeated up to `top_k` times): `<id> <similarity_score> <text>\n`
-*   Terminator: `END\n`
-*   Warning/Error: `ERROR <...>\n`
+This document does not duplicate that grammar so the two sources cannot drift.
 
-### `DELETE`
-**Request:**
-```
-DELETE <id>
-```
-
-**Responses:**
-*   Success: `DELETE <Successful>\n`
-*   Success with Compaction: `DELETE <Successful>, Compaction<Successful>\n`
-*   Warning: `DELETE <Successful>, WARNING <Database compaction failed>.\n`
-*   Error: `ERROR <...>\n` (e.g., `ERROR <Database could not find entry to delete>`)
-
-### Administrative Commands
-*   **`SAVE`**: Flushes the active header (including live/total counts) to disk. Returns `SAVE <Successful>\n`.
-*   **`LOAD`**: Clears active memory, re-reads the full entry database into RAM, rebuilds the IVF index from scratch, and repersists the centroids to disk. Returns `LOAD <Successful>\n`.
-*   **`OPTIMIZE`**: Triggers a manual k-means rebuild of the IVF index based on the current live vectors, then persists the new topology to the index file. Returns `OPTIMIZE <Successful>\n`.
+---
 
 ## Concurrency Model
 
-NeedleDB v2 employs a **thread-per-client** architecture.
-*   The main thread spins on a blocking `accept()` loop.
-*   Each accepted TCP connection spawns a dedicated, detached `std::thread` executing `handle_client()`.
-*   A single, coarse `std::mutex` (`store_mutex_`) guards the entire data layer (`Vector_store`, `File_manager`, `IVF_index`).
-*   The mutex is acquired exclusively during the core execution of `INSERT`, `QUERY`, `DELETE`, `SAVE`, `LOAD`, and `OPTIMIZE`. String parsing and socket `send()`/`recv()` operations occur outside the critical section, ensuring that slow network clients do not hold the global lock.
+NeedleDB v2 uses a **thread-per-client** design:
 
+1. The main thread blocks in `accept()`.
+2. Each accepted connection is handled on a dedicated, detached `std::thread` running `handle_client()`.
+3. A single coarse mutex, `store_mutex_`, guards the shared data plane: `Vector_store`, `File_manager`, and `IVF_index`.
+4. The mutex is held only for the **execution** of `INSERT`, `QUERY`, `DELETE`, `SAVE`, `LOAD`, and `OPTIMIZE`. Parsing the inbound line and writing the outbound response happen outside the critical section so a slow network peer does not keep the store locked while bytes trickle in or out.
 
 ```mermaid
 flowchart LR
@@ -171,38 +141,78 @@ flowchart LR
     M --> I[IVF_index]
 ```
 
+**Practical consequences**
+
+- Many clients may connect at once; their commands are serialized only while touching the store.
+- A client that spends seconds embedding text or calling an LLM does **not** block the engine during that work — only during each short TCP command.
+- `OPTIMIZE`, `LOAD`, and compaction hold the mutex for the whole operation and will delay other clients until they finish.
+
+---
+
 ## IVF Indexing & Auto-Compaction
 
 ### Inverted File Index (IVF)
-The engine utilizes a k-means clustering algorithm to partition vectors into distinct groups (centroids) for rapid approximate nearest-neighbor search.
-*   **Build Limits**: The index is configured for a maximum of 100 centroids (`MAX_CENTROIDS`) and evaluates the 5 closest clusters (`MAX_PROBES_SEARCH`) during a query.
-*   **Seeding & Tuning Mechanics**: To prevent massive performance degradation during k-means processing on large datasets, the initial centroid seeding *and* the 10 k-means tuning iterations are limited strictly to a randomized sample of at most 50,000 vectors (`MAX_KMEANS_SAMPLE`). Only the final assignment pass touches the full active dataset to place every vector into a cluster.
-*   **Optimization Reminder**: If the active vector count doubles since the last build (`OPTIMIZE_FACTOR` = 2) and exceeds a baseline of 500 vectors (`OPTIMIZE_REM_STARTS_AT`), the engine appends a warning to the `INSERT` success reply, urging the client to run `OPTIMIZE`.
+
+Vectors are partitioned with k-means into up to `MAX_CENTROIDS` (100) clusters. A query probes the `MAX_PROBES_SEARCH` (5) nearest centroids and scores candidates in those lists with dot-product similarity on L2-normalized vectors.
+
+**Build cost control:** centroid seeding and the k-means tuning iterations use a random sample of at most `MAX_KMEANS_SAMPLE` (50 000) vectors. A final assignment pass places every live vector into a list.
+
+**Persistence:** centroids and `last_build_at` (live count at last successful build) are stored in the index file so boot can skip a full k-means when the index is valid.
+
+**Staleness:** new inserts are assigned to existing centroids; centroid positions do not move until `OPTIMIZE` or `LOAD`. When live count grows enough relative to `last_build_at`, `INSERT` responses may include an optimize warning (see protocol).
 
 ### Auto-Compaction
-To reclaim physical disk space lost to soft-deleted (tombstoned) records, the engine triggers an automatic database rewrite (`compact()`) on `DELETE`.
-*   **Trigger**: Compaction fires when `(dead_entries * 8) >= header_.total_vector_count` (`DELETE_FACTOR` = 8).
-*   **Execution**: The engine writes all active records to a new temporary entry and text file, deletes the old files, renames the new ones, and rebuilds the RAM cache.
+
+Soft deletes only flip the tombstone flag. Space is reclaimed when:
+
+```text
+(dead_entries × DELETE_FACTOR) ≥ total_vector_count
+```
+
+with `DELETE_FACTOR = 8`. Compaction rewrites live records into new entry/text files, replaces the old files, and refreshes RAM structures. It runs under the store mutex.
+
+Temporary compaction files are created as `./temp_database.vdb` and `./temp_text_database.vdb` relative to the process working directory (not under the configured data paths).
 
 ```mermaid
 flowchart LR
     subgraph Before
         A1[live] --> A2[dead] --> A3[live] --> A4[dead]
     end
-    
     subgraph After[After compact]
         B1[live] --> B2[live] --> B3[live]
     end
-    
     Before ~~~ After
 ```
 
+---
+
 ## Known Limitations
 
-*   **Zero Security**: There is no authentication, authorization, or TLS anywhere in the protocol. Any client that can open a TCP connection to the port can issue any command, including destructive ones, with zero credentials.
-*   **Blocking Compaction**: The `compact()` function runs sequentially on the main lock. During a massive rewrite, all concurrent I/O operations from clients will stall until compaction completes.
-*   **Compaction Crash Risk**: The `compact()` function lacks atomic fail-safes. It deletes the primary binary files before fully securing the temporary replacements. An unexpected shutdown during the file replacement phase guarantees irreversible data corruption. Furthermore, the temporary file paths for compaction (`./data/temp_database.vdb` and `./data/temp_text_database.vdb`) are hardcoded, rather than derived from the configured environment variables.
-*   **O(N) Lookups**: Identifying a vector by its string ID (`find_by_id` and `get_index_in_ram`) relies on unoptimized $O(N)$ linear scans across the flat RAM arrays and binary files.
-*   **Stale Centroids**: The persisted IVF index is a snapshot. As vectors are inserted, they are assigned to existing centroids, but the centroids themselves never move to reflect the shifting data distribution unless an `OPTIMIZE` or `LOAD` command is explicitly issued.
-*   **Stale-Index-on-Fresh-Recreate Gap**: If a database is wiped or recreated, a brand-new, empty entry/text file pair can end up paired with a stale, already-populated index file left over from an unrelated prior dataset, because index-file freshness is not tied to entry/text freshness.
-*   **Metadata-Truncation (Partial Overlap)**: The IVF `search_()` applies geometric truncation (`top_k`) *before* metadata filtering. If the initial top-k geometrically closest candidates only *partially* match the metadata constraints, the engine will return fewer results than requested, rather than expanding the search radius. *(Note: Total non-overlap is handled correctly by falling back to a full metadata-only scan).*
+These are deliberate or accepted trade-offs for an educational, inspectable engine — not an exhaustive bug list.
+
+| Topic | Behaviour |
+| :--- | :--- |
+| **Security** | No authentication, authorization, or TLS. Any peer that can reach the port can run any command. |
+| **Blocking maintenance** | Compaction, `OPTIMIZE`, and `LOAD` hold `store_mutex_` for the whole operation. |
+| **Compaction durability** | Compaction is not crash-safe: primary files can be removed before replacements are fully in place. An interrupt mid-replace can corrupt the database. Temp paths are hardcoded to the working directory. |
+| **ID lookup** | `find_by_id` / in-RAM id resolution are $O(N)$ linear scans. |
+| **Stale centroids** | IVF centroids move only on `OPTIMIZE` / `LOAD`, not on every insert. |
+| **Index vs data pairing** | A fresh empty entry/text pair can still see an old non-empty index file if only some files were deleted; index freshness is not cryptographically bound to entry/text identity. |
+| **Metadata + top-k** | Geometric truncation to `top_k` can run before metadata filtering, so filtered queries may return fewer than `top_k` hits even when more matching vectors exist outside the geometric cut. Full non-overlap falls back to a metadata-oriented path. |
+| **Memory** | Active vectors are held in RAM for search. Dataset size is bounded by available memory. |
+| **Protocol cost** | Floats travel as decimal text, which is simple to debug and expensive compared to binary frames. |
+
+---
+
+## Related source map
+
+| Area | Primary locations |
+| :--- | :--- |
+| Schema / POD layouts | `include/schema.hpp` |
+| `.env` → `Config` | `include/env_config.hpp` |
+| Parsing | `include/command_parser.h`, `src/command_parser.cpp` |
+| Disk I/O | `include/file_manager.h`, `src/file_manager.cpp` |
+| RAM store | `include/vector_store.h`, `src/vector_store.cpp` |
+| IVF | `include/ivf.h`, `src/ivf.cpp` |
+| TCP server | `include/vector_server.h`, `src/vector_server.cpp` |
+| Entry point | `src/main.cpp` |
