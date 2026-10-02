@@ -171,7 +171,7 @@ Soft deletes only flip the tombstone flag. Space is reclaimed when:
 
 with `DELETE_FACTOR = 8`. Compaction rewrites live records into new entry/text files, replaces the old files, and refreshes RAM structures. It runs under the store mutex.
 
-Temporary compaction files are created as `./temp_database.vdb` and `./temp_text_database.vdb` relative to the process working directory (not under the configured data paths).
+Temporary compaction files are written beside the real databases (same directory as `VECDB_ENTRY_DATA_PATH` / `VECDB_TEXT_DATA_PATH`, e.g. `…/temp_database.vdb` and `…/temp_text_database.vdb`) so `rename` stays on one filesystem. That avoids Docker failures where the process CWD and the data volume sit on different devices (`Invalid cross-device link`).
 
 ```mermaid
 flowchart LR
@@ -194,7 +194,7 @@ These are deliberate or accepted trade-offs for an educational, inspectable engi
 | :--- | :--- |
 | **Security** | No authentication, authorization, or TLS. Any peer that can reach the port can run any command. |
 | **Blocking maintenance** | Compaction, `OPTIMIZE`, and `LOAD` hold `store_mutex_` for the whole operation. |
-| **Compaction durability** | Compaction is not crash-safe: primary files can be removed before replacements are fully in place. An interrupt mid-replace can corrupt the database. Temp paths are hardcoded to the working directory. |
+| **Compaction durability** | Compaction is not crash-safe: primary files can be removed before replacements are fully in place. An interrupt mid-replace can corrupt the database. Temps are placed next to the configured data files (same directory) so volume-backed Docker deploys can rename without a cross-device error. |
 | **ID lookup** | `find_by_id` / in-RAM id resolution are $O(N)$ linear scans. |
 | **Stale centroids** | IVF centroids move only on `OPTIMIZE` / `LOAD`, not on every insert. |
 | **Index vs data pairing** | A fresh empty entry/text pair can still see an old non-empty index file if only some files were deleted; index freshness is not cryptographically bound to entry/text identity. |

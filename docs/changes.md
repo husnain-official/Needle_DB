@@ -167,9 +167,10 @@ i need to rember even if they only teach us ASCII the world has moved on from th
 4. 
 
 ### 10/2/25 (3rd commit):
-1. 
+1.  BUG 2 Fixed, The temp database files created during compact() in docker container were causing cross device link errors, so updated the compact function engine/file_manager.cpp to create the temporary files in the same directory as the database files.
+2. Also update documentation file, engine.md file to match the new behavior. 
 
 
 ## Bugs Found: 
 1. Known issue: In chatbot mode, follow-up questions that rely on earlier messages may get a "no information" reply, because the similarity-threshold check runs before conversation history reaches the LLM. Rephrasing the question with full context works around it. This will be fixed in the next release.
-2. 
+2. New bud identified and faced, when compact runs on a docker container, it fails and temporary files are created in root, so the container give "cross device link" error, fix: put the temporary file in the same directory as the database files themselves. [FIXED]

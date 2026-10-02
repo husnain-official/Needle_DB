@@ -231,9 +231,15 @@ bool File_manager::compact()
 {
     try
     {
-        // 1. Create a temporary new file
-        std::string temp_path = "./temp_database.vdb";
-        std::string temp_text_path = "./temp_text_database.vdb";
+        // Temps must live on the same filesystem as the real DB files.
+        // Hardcoded "./temp_*.vdb" breaks under Docker when data is on a
+        // volume (rename → "Invalid cross-device link") and can leave the
+        // primary files already deleted with nothing to replace them.
+        const std::filesystem::path entry_dir = std::filesystem::path(path_).parent_path();
+        const std::filesystem::path text_dir = std::filesystem::path(text_file_path_).parent_path();
+        const std::string temp_path = (entry_dir / "temp_database.vdb").string();
+        const std::string temp_text_path = (text_dir / "temp_text_database.vdb").string();
+
         std::fstream new_file;
         std::fstream new_text_file;
         new_file.open(temp_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
@@ -241,7 +247,7 @@ bool File_manager::compact()
             throw std::runtime_error("[File_manager] | Couldn't create new file " + temp_path);
         new_text_file.open(temp_text_path, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
         if (!new_text_file.is_open())
-            throw std::runtime_error("[File_manager] | Couldn't create new file " + temp_path);
+            throw std::runtime_error("[File_manager] | Couldn't create new file " + temp_text_path);
         text_file_.seekg(0);
 
         // 2. [Header]
@@ -263,7 +269,7 @@ bool File_manager::compact()
 
             entry.text_offset = new_text_file.tellp();
             new_text_file.write(&flag, 1);
-            new_text_file.write(reinterpret_cast<const char *>(temp_str.data()), temp_str.size()); // Note: temp_str.size() == entry.text_length;
+            new_text_file.write(reinterpret_cast<const char *>(temp_str.data()), temp_str.size());
             new_file.write(reinterpret_cast<const char *>(&entry), sizeof(DB_entry));
 
             if (!new_file.good())
@@ -273,7 +279,7 @@ bool File_manager::compact()
         }
 
         // 4. [File Replacements]
-        // Currently, this is a bad function as it allows data corruption in case of shutdown, later on shift to a better implementation.
+        // Still not crash-safe if power is lost mid-swap; same as before.
         file_.close();
         text_file_.close();
         new_file.close();
@@ -287,7 +293,7 @@ bool File_manager::compact()
         if (!rename_file(temp_text_path, text_file_path_))
             throw std::runtime_error("[File_manager] | Couldn't rename new text database.");
 
-        // 5. Re-initialize the manager so the rest of the app can keep running
+        // 5. Re-open
         file_.open(path_, std::ios::in | std::ios::out | std::ios::binary);
         if (!file_.is_open())
             throw std::runtime_error("[File_manager] | Couldn't reopen database after compaction.");
@@ -296,7 +302,7 @@ bool File_manager::compact()
         if (!text_file_.is_open())
             throw std::runtime_error("[File_manager] | Couldn't reopen text database after compaction.");
 
-        // 6. Re-initilize the RAM cache
+        // 6. RAM header
         header_ = h_new;
 
         return true;
