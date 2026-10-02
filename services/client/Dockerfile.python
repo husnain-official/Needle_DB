@@ -5,13 +5,8 @@ FROM python:3.11-slim
 # path ("services/engine/include/schema.hpp") is relative to the working directory.
 WORKDIR /app
 
-# Consider pinning these in a requirements.txt so rebuilds stay reproducible.
-RUN pip install --no-cache-dir \
-    streamlit \
-    python-dotenv \
-    pypdf \
-    python-docx \
-    ollama
+COPY services/client/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/client/ /app/services/client/
 COPY services/engine/include/schema.hpp /app/services/engine/include/schema.hpp

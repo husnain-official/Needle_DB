@@ -154,6 +154,16 @@ Updated vector_server tests, file_manager tests
 i need to rember even if they only teach us ASCII the world has moved on from that decades ago, new standards are used now a days, just something to keep in mind for next time.
 8. Ran the app and tested it. 
 
-### 9/30/26 (2st commit):
+### 10/2/26 (1st commit):
 1. Updated 1200 max text lenght in engine.md
+2. Updated all docker files, to match the new system
+3. Ran docker build/compose to test it. 
+4. Added a requirements.txt for the client/
+
+
+## Major Issue Noted: 
+1. There is no option in the UI for compact, delete_id, save, optimize, load, any of them, are not being used right now, or rather CAN NOT be used. [To be done now]
+
+## Bugs Found: 
+1. Known issue: In chatbot mode, follow-up questions that rely on earlier messages may get a "no information" reply, because the similarity-threshold check runs before conversation history reaches the LLM. Rephrasing the question with full context works around it. This will be fixed in the next release.
 2. 

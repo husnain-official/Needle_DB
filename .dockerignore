@@ -3,6 +3,8 @@
 docs
 LICENSE
 README.md
+context.md
+test_results.md
 
 # secrets / local config: compose mounts .env at runtime, never bake it in
 .env
@@ -17,3 +19,4 @@ README.md
 # runtime state must not be baked into images
 services/engine/data/*.vdb
 services/client/data/ingestion_ledger.json
+services/client/data/knowledge_base/*
