@@ -1,0 +1,112 @@
+/**
+ * @file vector_server.h
+ * @brief TCP socket server implementation orchestrating network bindings and concurrent client request handling.
+ */
+#pragma once
+// Necessary libraries for server creation and networking.
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <errno.h>
+// Necessary libraries for rest of logic, threading, and strings.
+#include <string>
+#include <cstring>
+#include <iostream>
+#include <thread>
+#include <shared_mutex>
+#include <mutex>
+// Project-specific headers.
+#include "schema.hpp"       // for schema-refrence
+#include "vector_store.h"   // for RAM updates/access
+#include "file_manager.h"   // for file/database updates/access
+#include "similarities.hpp" // for similarity searches
+#include "command_parser.h" // for parsing logic
+#include "types.h"          // for all structs used though out other files
+#include "ivf.h"            // for IVF
+//
+#define BACKLOG (10) // max no of client waiting in queue
+/**
+ * @brief High-performance TCP server managing concurrent client connections, protocol parsing, and thread-safe database operations.
+ */
+class Vector_Server
+{
+public:
+    /**
+     * @brief Constructs the server instance and binds references to the active storage and file management engines.
+     * @param port Target network port string for binding incoming client connections.
+     * @param V_store Active in-memory storage engine instance.
+     * @param F_manager Initialized binary file handler instance.
+     * @param conditions Immutable environment configuration structure dictating operational constraints.
+     */
+    Vector_Server(std::string port, Vector_store &, File_manager &, const Config);
+
+    /**
+     * @brief Safely terminates the active network server socket connection and destroys the instance.
+     */
+    ~Vector_Server();
+    // --- Core-Functionality ---
+    /**
+     * @brief Configures the network socket and binds to the designated target port.
+     * @return True upon successful socket binding, false if address resolution or port binding fails.
+     * @warning Resets the internal socket file descriptor to negative one if binding fails.
+     */
+    bool setup();
+
+    /**
+     * @brief Initiates the blocking listener loop, spawning a detached thread to handle each accepted client connection.
+     * @note Executes an initial auto-load of persistent database records and the IVF index topology before listening.
+     * @warning Terminates the entire program via exit if socket listening fails.
+     */
+    void run();
+
+    /**
+     * @brief Safely terminates the active network server socket connection.
+     * @note Safe to invoke multiple times or if the socket remains uninitialized.
+     */
+    void stop();
+
+private:
+    int server_fd;
+    const Config con;
+    std::string port_num;
+    size_t last_build_at = 0;
+    std::mutex store_mutex_;
+    /**
+     * @brief Processes and executes line-delimited text commands from an active client socket.
+     * @param client_fd Open file descriptor bound to the communicating client.
+     * @note Requires incoming command strings to terminate with a newline character.
+     * @note Acquires a thread-safe mutex lock exclusively during core database read, write, and optimization operations.
+     * @warning Disconnects and closes the client socket immediately upon loop termination.
+     */
+    void handle_client(int client_fd);
+    // Vector_server is dependent upon both, vector_store and file_manager
+    Parser parser = Parser{};
+    Vector_store &vector_store;
+    File_manager &file_manager;
+    IVF_index ivf_index_{};
+};
+//  -----------Both below structs are for refrence only, and are predefined.-------------
+// use a guide to fully understand this prebuilt code.
+// struct sockaddr
+// {
+//     unsigned short sa_family; // address family, AF_xxx
+//     char sa_data[14];         // 14 bytes of protocol address
+// };
+// struct addrinfo
+// {
+//     int ai_flags;             // AI_PASSIVE
+//     int ai_family;            // AF_UNSPEC
+//     int ai_socktype;          // SOCK_STREAM
+//     int ai_protocol;          // 0
+//     size_t ai_addrlen;        // size of ai_addr in bytes
+//     struct sockaddr *ai_addr; // struct sockaddr_in or _in6
+//     char *ai_canonname;
+//     struct addrinfo *ai_next; // linked list, next node
+// };

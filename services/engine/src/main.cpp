@@ -1,0 +1,32 @@
+#include "vector_store.h"
+#include "file_manager.h"
+#include "vector_server.h"
+#include "env_config.hpp"
+using namespace std;
+int main()
+{
+    cout << "Needle_DB(Server) starting...\n";
+
+    // -----------------------Configure with .env---------------------------
+    Config env;
+    bool success = loadServerConfig(".env", env);
+    if (!success)
+    {
+        cout << "Error: Server could not read .env file properly\n";
+        return -1;
+    }
+    // ----------------------Declare All Components-------------------------
+    Vector_store database{};
+    // Configure Database
+    File_manager file_handler(env.vecdb_entry_file_path, env.vecdb_text_file_path, env.vecdb_index_file_path);
+    // Configure Server
+    Vector_Server server(env.port, database, file_handler, env);
+
+    //----------------------------Main Body---------------------------------
+    server.setup();
+    server.run();
+    server.stop();
+
+    //----------------------------Program End-------------------------------
+    return 0;
+}

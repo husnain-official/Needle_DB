@@ -1,35 +1,17 @@
 services:
 
   cpp_server:
-    # build:
-      # context: .
-      # dockerfile: Dockerfile.cpp
-    image: husnain80/needledb-server:latest
+    build:
+      context: .
+      dockerfile: services/engine/Dockerfile.cpp
+    image: husnain80/needledb-server:2.0.0   # your call on the tag; also push :latest
     ports:
       - "8080:8080"
     volumes:
-      - db_data:/app/data
-      - ./.env:/app/.env:ro
+      - db_data:/app/services/engine/data    # matches VECDB_*_PATH in .env (repo-root-relative)
+      - ./.env:/app/.env:ro                  # the engine aborts at startup without a .env in its working dir
     env_file:
       - .env
-    networks:
-      - needledb_net
-
-  python_app:
-    # build:
-      # context: .
-      # dockerfile: Dockerfile.python
-    image: husnain80/needledb-app:latest
-    ports:
-      - "8501:8501"
-    volumes:
-      - db_data:/app/data
-      - ./.env:/app/.env:ro
-    env_file:
-      - .env
-    depends_on:
-      - cpp_server
-      - ollama
     networks:
       - needledb_net
 
@@ -37,6 +19,46 @@ services:
     image: ollama/ollama
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - needledb_net
+
+  # One-shot job: the plain ollama/ollama image does NOT pull models by itself.
+  ollama_init:
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - .env                                 # supplies OLLAMA_HOST, EMBEDDING_MODEL, LOCAL_LLM_MODEL
+    entrypoint: ["/bin/sh", "-c", "ollama pull $$EMBEDDING_MODEL && ollama pull $$LOCAL_LLM_MODEL"]
+    restart: "no"
+    networks:
+      - needledb_net
+
+  python_app:
+    build:
+      context: .
+      dockerfile: services/client/Dockerfile.python
+    image: husnain80/needledb-app:2.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      # Same volume as the engine on purpose: resetting it wipes the vector DB AND the
+      # ingestion ledger together, so the two can't drift out of sync.
+      - db_data:/app/services/client/data
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+    depends_on:
+      cpp_server:
+        condition: service_started
+      ollama_init:
+        condition: service_completed_successfully
     networks:
       - needledb_net
 

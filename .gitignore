@@ -1,6 +1,7 @@
 #   Folders to ignore
 .vscode/
 build/
+build-debug/
 include/nlohmann/
 bin/
 obj/
@@ -12,6 +13,7 @@ obj/
 #   OS generated files
 .DS_Store
 Thumbs.db
+*.Identifier
 
 #   virtual-env
 .venv/
@@ -36,3 +38,7 @@ __pycache__/
 hello.py 
 test_embed.py
 swark-output/
+context.md
+temp.txt
+test_results.md
+results.md

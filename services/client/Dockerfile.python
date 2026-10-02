@@ -1,0 +1,15 @@
+# Build context is the REPO ROOT (see docker-compose.yml).
+FROM python:3.11-slim
+
+# Mirror the repo layout inside the image and run from the repo root: schema_loader.py's default
+# path ("services/engine/include/schema.hpp") is relative to the working directory.
+WORKDIR /app
+
+COPY services/client/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/client/ /app/services/client/
+COPY services/engine/include/schema.hpp /app/services/engine/include/schema.hpp
+
+EXPOSE 8501
+CMD ["streamlit", "run", "services/client/app_gui.py", "--server.address=0.0.0.0", "--server.headless=true"]
