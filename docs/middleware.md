@@ -159,7 +159,7 @@ Aggregate `stats.kb_chunks_loaded` is the sum of accepted chunks.
 
 **Why it exists:** the v2 engine has no `LIST` / `COUNT` / `STATS` command. After a process restart, the UI would otherwise show zero documents even when the `.vdb` files still hold data. The ledger is a **client convenience**, not a replica of engine truth. Another client writing to the same engine will not update this file.
 
-Duplicate guard: a filename already marked `successful` or `partial` is refused on re-ingest until the ledger entry is cleared or marked failed (for example after a UI “delete document” flow).
+Duplicate guard: a filename already marked `successful` or `partial` is refused on re-ingest until the ledger entry is cleared or marked failed (edit/clear the ledger, or mark failed by hand if you need to re-ingest the same name).
 
 ---
 
@@ -184,7 +184,7 @@ Presentation only; business logic stays in `RAGChatbot` / pipeline / client.
 | Sidebar | Connect/disconnect, load KB folder, live ledger stats, OPTIMIZE threshold hint, engine admin (`OPTIMIZE` / `SAVE` / `LOAD`, delete-by-id). |
 | Chat | History, clear control near the input, RAG answers with source captions. |
 | Search Explorer | Ad-hoc semantic search, optional metadata filter, per-hit delete. |
-| Knowledge Base | Upload/ingest first; then ledger table with per-document delete (reconstructs `*_chunk_*` ids and issues `DELETE`s). |
+| Knowledge Base | Upload/ingest first; then ledger table of loaded documents (status / chunk counts). |
 
 The OPTIMIZE threshold display uses ledger count plus `OPTIMIZE_REM_STARTS_AT` / `OPTIMIZE_FACTOR` from the loaded schema. It approximates engine warnings; it does not read `last_build_at` from disk (that value is not exposed on the wire in v2).
 
@@ -208,7 +208,6 @@ Ingestion of hundreds of chunks is slow mainly because of **per-chunk embedding*
 | Ledger ≠ engine | Counts and document lists can drift if another client mutates the DB or files are deleted only on one side. |
 | No engine STATS | Cannot show true live/tombstone counts without a new protocol command. |
 | One socket usage model | Designed for sequential use inside a Streamlit session, not a thread pool sharing one `Client`. |
-| Delete-by-document | Reconstructs ids from the same rules as ingest; partial past failures or external inserts with different id schemes will not match. |
 | CPU latency | End-to-end chat time is usually dominated by Ollama on CPU; see [`performance.md`](./performance.md). |
 | Secrets / multi-user | No authn between UI and middleware, or middleware and engine. |
 

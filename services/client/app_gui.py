@@ -5,7 +5,6 @@
 import sys
 import os
 import tempfile
-import re
 from dotenv import load_dotenv
 
 sys.path.append(".")
@@ -145,49 +144,6 @@ def optimize_threshold_info():
         "relevant": current >= starts_at,
     }
 
-
-def _sanitize_for_wire(value: str) -> str:
-    return re.sub(r"[\s=]+", "_", value)
-
-
-def _truncate_utf8(value: str, max_bytes: int) -> str:
-    if max_bytes <= 0:
-        return ""
-    encoded = value.encode("utf-8")
-    if len(encoded) <= max_bytes:
-        return value
-    return encoded[:max_bytes].decode("utf-8", errors="ignore")
-
-
-def _build_doc_id(base_name: str, chunk_index: int, schema) -> str:
-    suffix = f"_chunk_{chunk_index}"
-    suffix_bytes = len(suffix.encode("utf-8"))
-    max_prefix_bytes = max(schema.ID_LENGTH - suffix_bytes, 0)
-    prefix = _truncate_utf8(base_name, max_prefix_bytes)
-    doc_id = f"{prefix}{suffix}"
-    if len(doc_id.encode("utf-8")) > schema.ID_LENGTH:
-        doc_id = _truncate_utf8(doc_id, schema.ID_LENGTH)
-    return doc_id
-
-
-def delete_document_chunks(filename: str, accepted_chunks: int) -> tuple[int, int, list[str]]:
-    """
-    Delete every reconstructed chunk ID for a document.
-    Returns (deleted_ok, failed, error_messages).
-    """
-    bot = st.session_state.bot
-    schema = bot.engine_schema
-    base_name = _sanitize_for_wire(os.path.splitext(filename)[0])
-    ok, fail, errors = 0, 0, []
-    for i in range(int(accepted_chunks)):
-        doc_id = _build_doc_id(base_name, i, schema)
-        try:
-            bot.client.delete(doc_id)
-            ok += 1
-        except Exception as e:
-            fail += 1
-            errors.append(f"{doc_id}: {e}")
-    return ok, fail, errors
 
 
 def run_admin(cmd: str):
@@ -592,34 +548,16 @@ with tab_kb:
                 typ = r.get("Type", "❓")
 
                 with st.container(border=True):
-                    left, right = st.columns([4, 1])
-                    with left:
-                        st.markdown(f"**{typ} {name}**")
-                        st.caption(f"Status: `{status}` · Chunks: **{accepted} / {total}**")
-                    with right:
-                        if accepted > 0 and st.button(
-                            "🗑 Delete",
-                            key=f"del_doc_{name}",
-                            help=f"Soft-delete all {accepted} chunk(s) of this document in the engine",
-                        ):
-                            with st.spinner(f"Deleting {accepted} chunk(s) of '{name}'..."):
-                                ok, fail, errors = delete_document_chunks(name, accepted)
-                            if ok:
-                                st.toast(f"Deleted {ok} chunk(s) from '{name}'")
-                            if fail:
-                                st.warning(f"{fail} chunk(s) failed:\n" + "\n".join(errors[:5]))
-                            # Update ledger: mark as failed / zero accepted so re-ingest is allowed
-                            try:
-                                from pipeline.ledger import record_ingestion
-                                record_ingestion(name, "failed", total, 0, error="deleted via UI")
-                                st.session_state.bot._rehydrate_from_ledger()
-                            except Exception as e:
-                                st.caption(f"Ledger update note: {e}")
-                            st.rerun()
+                    st.markdown(f"**{typ} {name}**")
+                    st.caption(f"Status: `{status}` · Chunks: **{accepted} / {total}**")
 
             st.caption(
                 f"Total: **{chunk_count()}** accepted chunks across **{len(summary)}** document(s) "
                 "(client-side ledger; may lag if another client wrote to the engine)."
+            )
+            st.caption(
+                "To remove vectors: use **Search Explorer** (per-hit 🗑) or **Engine Admin → Delete by exact ID**. "
+                "Whole-document bulk delete is not offered in the UI (avoids multi-DELETE + auto-compaction edge cases)."
             )
 
         st.divider()
