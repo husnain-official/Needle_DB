@@ -2,7 +2,7 @@
 
 # NeedleDB
 
-**v2 · individual-lite** — a from-scratch C++ vector database engine with a Python RAG middleware and Streamlit UI, speaking a raw line-delimited TCP protocol.
+**v2-lite** — a from-scratch C++ vector database engine with a Python RAG middleware and Streamlit UI, speaking a raw line-delimited TCP protocol. This is the *lite* release; a redesigned UI is planned for **v2-h**.
 
 ![C++20](https://img.shields.io/badge/std-C%2B%2B20-blue.svg)
 ![Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)
@@ -31,9 +31,9 @@ They never share memory or files for business logic. Python talks to the engine 
 
 ## What changed from v1
 
-v1 was the first public shape of NeedleDB: a working engine + Python RAG path, but with several design corners that forced desync risk, slow boots, and a strictly serial server. **v2 (individual-lite)** keeps the same educational goal and local Ollama stack; it changes the storage and concurrency contracts.
+v1 was the first public shape of NeedleDB: a working engine + Python RAG path, but with several design corners that forced desync risk, slow boots, and a strictly serial server. **v2-lite** keeps the same educational goal and local Ollama stack; it changes the storage and concurrency contracts.
 
-| Area | v1 | v2 (this release) |
+| Area | v1 | v2-lite (this release) |
 | :--- | :--- | :--- |
 | **Text storage** | Engine stored vectors + ids + metadata only. Raw chunk text lived in a Python `chunk_store.json`. Engine and JSON could drift. | Engine owns a separate **text heap** file (`database_text.vdb`). `QUERY` returns text inline. No chunk JSON as source of truth. |
 | **`INSERT` shape** | Id + dims + floats (+ metadata); text was not a first-class engine field. | `INSERT <id> <text_length> <text> <dims> …` — length-prefixed text may contain spaces. |
@@ -125,6 +125,41 @@ Structural limits (dimensions, id length, text max, IVF caps, optimize threshold
 
 Native (non-Docker) development typically sets `IP=localhost` and `OLLAMA_HOST=http://localhost:11434`.
 
+### Choosing a smarter chat model
+
+The default `LOCAL_LLM_MODEL=qwen2.5:3b` is picked so the stack runs on ordinary laptops and CPU-only machines. Retrieval is usually fine at this size, but a 3B model can slip on multi-step arithmetic, questions that span several chunks, or follow-ups that depend on earlier turns. **If the chatbot's answers feel weak, swap in a larger model** — change one line in `.env`:
+
+```bash
+# .env  (no spaces around "=")
+LOCAL_LLM_MODEL=qwen2.5:7b
+```
+
+Other options with noticeably stronger reasoning:
+
+| Model (Ollama tag) | Approx. download | Notes |
+| :--- | :--- | :--- |
+| `qwen2.5:7b` | ~4.7 GB | Good first step up from 3b |
+| `llama3.1:8b` | ~4.9 GB | Strong general-purpose alternative |
+| `qwen2.5:14b` | ~9 GB | Much better multi-step reasoning |
+| `qwen2.5:32b` | ~20 GB | Best quality of these; needs a high-memory machine or a GPU |
+
+Pull the model, then restart the Python app so it re-reads `.env`:
+
+```bash
+# Docker
+docker compose exec ollama ollama pull qwen2.5:7b
+docker compose restart python_app
+
+# Native
+ollama pull qwen2.5:7b      # then restart Streamlit
+```
+
+**Trade-offs — read before you switch:**
+
+- **More memory.** Larger models need roughly as much RAM/VRAM as their download size, plus working space for context. On low-memory machines they may fail to load, or push the system into swap and crawl. Check Ollama can actually load the model before relying on it.
+- **Slower responses.** Generation time grows with parameter count. On CPU-only hardware, a 7B+ model can take noticeably longer per answer than the default.
+- **Same embeddings, no re-ingest needed.** Changing `LOCAL_LLM_MODEL` does not touch stored vectors. Do **not** change `EMBEDDING_MODEL` casually: the engine uses fixed 1024-d vectors, so a replacement must also output 1024 dimensions and your documents must be re-ingested.
+
 ---
 
 ## Project layout
@@ -188,17 +223,47 @@ Engine search at tens of thousands of 1024-d vectors is typically **tens of mill
 
 ## Screenshots
 
-**Semantic search**
+The examples below use a small synthetic test document (invented names and figures, made to check retrieval), so you can verify each answer against its source text.
+
+### Search Explorer
+
+Query the vector DB directly, inspect similarity scores, and delete individual vectors. Matching is semantic, not keyword-based: the questions below are not phrased like the passages they find.
+
+**Finds the rate-limit table.** The top hit (0.6401) contains the plan limits (Free: 60 requests/minute) and the `429` + `Retry-After` behaviour.
 
 <div align="center">
-  <img src="./docs/assets/Screenshot_semetic_search.png" alt="Semantic search" width="900" />
+  <img src="./docs/assets/search-quill-rate-limits.png" alt="Search Explorer: Quill API rate limits query" width="900" />
 </div>
 
-**RAG chat**
+**Finds a fact in a different section.** The top hit (0.6657) holds the founding of Marlowe Ridge (1887, by Tomas Eklund). Chunks are fixed-size word windows, so one chunk can straddle two sections, as this one does.
 
 <div align="center">
-  <img src="./docs/assets/Screenshot_Rag_bot.png" alt="RAG chatbot" width="900" />
+  <img src="./docs/assets/search-marlowe-ridge.png" alt="Search Explorer: Marlowe Ridge founding query" width="900" />
 </div>
+
+**Matches meaning, not wording.** "Why is octopus blood not red?" retrieves the passage about blue, copper-based hemocyanin (0.6820).
+
+<div align="center">
+  <img src="./docs/assets/search-octopus-blood.png" alt="Search Explorer: octopus blood query" width="900" />
+</div>
+
+### RAG chat
+
+Ask questions in plain language; answers are built from retrieved chunks and show their source and similarity score.
+
+**Grounded answer with its source.**
+
+<div align="center">
+  <img src="./docs/assets/chat-tax-answer.png" alt="RAG chat: tax calculation answered from the retrieved chunk" width="900" />
+</div>
+
+**Admits when the knowledge base has no answer** instead of guessing.
+
+<div align="center">
+  <img src="./docs/assets/chat-no-answer.png" alt="RAG chat: question outside the knowledge base" width="900" />
+</div>
+
+> Answer quality in chat depends on the LLM. If answers fall short of retrieval quality, see [Choosing a smarter chat model](#choosing-a-smarter-chat-model).
 
 ---
 
@@ -226,6 +291,7 @@ NeedleDB prioritises transparency over production hardening.
 - **Stale centroids** — inserts assign to existing lists; centroid positions move only on `OPTIMIZE` / `LOAD`.
 - **Ledger ≠ engine** — document lists in the UI come from a Python JSON file, not a server `STATS` command (none in v2).
 - **CPU LLM latency** — expect multi-second chat without a GPU; see performance doc.
+- **Small default LLM** — `qwen2.5:3b` favours low memory over reasoning; see [Choosing a smarter chat model](#choosing-a-smarter-chat-model).
 - **POSIX networking** — the engine is built for Linux / macOS / WSL. **Native Windows (MSVC + WinSock-only workflows) is not supported.**
 
 ---
@@ -466,4 +532,4 @@ If you are assessing the repo for learning: read `schema.hpp`, `file_manager`, `
 
 ## Release tag
 
-**v2-release-individual-lite** — Streamlit UI, Docker Compose path, persisted IVF centroids, client ledger, documented protocol/middleware/performance.
+**v2-lite** — Streamlit UI, Docker Compose path, persisted IVF centroids, client ledger, documented protocol/middleware/performance.

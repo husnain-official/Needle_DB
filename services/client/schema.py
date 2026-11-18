@@ -39,7 +39,7 @@ PY_SCHEMA = SimpleNamespace(
 
     # ── app/rag_chatbot.py — RAG chatbot defaults ─────────────────────
     DEFAULT_MIN_SCORE=0.55,          # min cosine similarity to keep a retrieved chunk
-    DEFAULT_MAX_HISTORY_TURNS=6,     # conversation turns kept (1 turn = user + assistant)
+    DEFAULT_MAX_HISTORY_TURNS=2,     # conversation turns kept (1 turn = user + assistant)
     KB_FOLDER = "services/client/data/knowledge_base"   # folder where the RAG chatbot ingests files from
     
 )
